@@ -18,6 +18,7 @@ const AccountSettings = lazy(() => import("./pages/AccountSettings"));
 const DevDocs = lazy(() => import("./pages/DevDocs"));
 const AppLayout = lazy(() => import("./layouts/AppLayout"));
 const NotFound = lazy(() => import("./pages/NotFound"));
+const showPublicLanding = import.meta.env.VITE_PUBLIC_LANDING === "true";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -55,7 +56,10 @@ const App = () => (
         <BrowserRouter basename={import.meta.env.BASE_URL} future={{ v7_startTransition: true, v7_relativeSplatPath: true }}>
           <Suspense fallback={<RouteLoader />}>
             <Routes>
-              <Route path="/" element={<Landing />} />
+              <Route
+                path="/"
+                element={showPublicLanding ? <Landing /> : <Navigate to="/dashboard" replace />}
+              />
               <Route path="/auth" element={<Navigate to="/dashboard" replace />} />
               <Route element={<AuthProvider><ProtectedRoute><AppLayout /></ProtectedRoute></AuthProvider>}>
                 <Route path="/dashboard" element={<Dashboard />} />

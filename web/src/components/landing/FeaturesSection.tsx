@@ -49,7 +49,7 @@ const fadeUp = {
 };
 
 export function FeaturesSection() {
-  const heroImageUrl = `${import.meta.env.BASE_URL}images/atoll-hero-2.png`;
+  const heroImageUrl = `${import.meta.env.BASE_URL}images/atoll-hero.png`;
 
   return (
     <section

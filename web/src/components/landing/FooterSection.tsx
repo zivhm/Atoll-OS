@@ -17,9 +17,9 @@ const footerLinks: FooterLinkGroup = {
     { label: "Open Dashboard", href: "/dashboard" },
   ],
   "Open Source": [
-    { label: "Contributing", href: "https://github.com/zivh/atoll-os-public/blob/main/CONTRIBUTING.md" },
-    { label: "License", href: "https://github.com/zivh/atoll-os-public/blob/main/LICENSE" },
-    { label: "Repository", href: "https://github.com/zivh/atoll-os-public" },
+    { label: "Contributing", href: "https://github.com/zivhm/Atoll-OS/blob/main/CONTRIBUTING.md" },
+    { label: "License", href: "https://github.com/zivhm/Atoll-OS/blob/main/LICENSE" },
+    { label: "Repository", href: "https://github.com/zivhm/Atoll-OS" },
     { label: "Dashboard", href: "/dashboard" },
   ],
 };
