@@ -21,20 +21,6 @@
 
 ---
 
-## App Preview
-
-![Chat view](landing/public/images/chat.png)
-
-<table>
-  <tr>
-    <td><img src="landing/public/images/setup-1.png" alt="Helper setup" /></td>
-    <td><img src="landing/public/images/set-d.png" alt="Helper settings" /></td>
-    <td><img src="landing/public/images/ids-d.png" alt="Identity catalog" /></td>
-  </tr>
-</table>
-
----
-
 ## 🏝️ Why Atoll
 
 Most agent tools hand you a blank slate and expect you to figure out the rest.
@@ -66,6 +52,21 @@ The underlying runtime is unchanged. We just give it a purpose before you ever o
 | **Runtime operations** | Inspect health, logs, events, repair actions, and reconcile flows |
 | **Channel wiring** | Expose Telegram and Discord settings without spreading config across tools |
 | **Single-host** | Run locally during development or in Docker Compose for a self-hosted deployment |
+
+---
+
+
+## App Preview
+
+![Chat view](landing/public/images/chat.png)
+
+<table>
+  <tr>
+    <td><img src="landing/public/images/setup-1.png" alt="Helper setup" /></td>
+    <td><img src="landing/public/images/set-d.png" alt="Helper settings" /></td>
+    <td><img src="landing/public/images/ids-d.png" alt="Identity catalog" /></td>
+  </tr>
+</table>
 
 ---
 
