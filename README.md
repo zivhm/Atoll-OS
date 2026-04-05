@@ -11,7 +11,7 @@
 ![Web](https://img.shields.io/badge/web-React%20%2B%20Vite-61DAFB?style=flat-square)
 ![API](https://img.shields.io/badge/api-Fastify%20%2B%20TypeScript-000000?style=flat-square)
 
-Atoll removes the busywork of creating and managing AI helpers, so you can focus on your work.
+# Atoll removes the busywork of creating and managing AI helpers, so you can focus on your work.
 
 [Landing page](https://zivhm.github.io/Atoll-OS/) · [Quick start](#-quick-start) · [Docker Compose](#-docker-compose) · [Core concepts](#-core-concepts) · [Configuration](#%EF%B8%8F-configuration)
 
