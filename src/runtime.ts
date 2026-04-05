@@ -1,7 +1,5 @@
-import { execFile } from "node:child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { execFile, spawn } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
 
 import {
@@ -11,11 +9,13 @@ import {
   getRuntimeDescriptor,
   normalizeRuntimeType,
   resolveRuntimeEnvironment,
+  resolveRuntimeHealthcheckArgs,
   resolveRuntimeLaunchArgs,
   type RuntimeDescriptor,
   type RuntimeProcessMode
 } from "./runtime-kind.js";
 import type { RuntimeType, WorkspaceKind, WorkspaceResourceMode } from "./store.js";
+import { createRuntimeVolumeIo } from "./runtime-volume-io.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -26,6 +26,7 @@ const DEFAULT_RUNTIME_PROCESS_MODE: RuntimeProcessMode = "daemon";
 const LOOPBACK_PUBLISH_HOST = "127.0.0.1";
 export const SHARED_WORKSPACE_MOUNT_PATH = "/atoll-shared-workspace";
 export const RUNTIME_SHARED_FILES_DIRNAME = "shared-files";
+const runtimeVolumeIo = createRuntimeVolumeIo(runDockerBuffer);
 
 export type RuntimeLlmConfig = {
   provider: string;
@@ -327,6 +328,8 @@ export async function provisionRuntimeContainer(input: ProvisionRuntimeContainer
     runArgs.push("-p", `${LOOPBACK_PUBLISH_HOST}:${gatewayPort}:${gatewayPort}`);
   }
 
+  runArgs.push(...resolveRuntimeHealthcheckArgs(runtimeType, gatewayPort));
+
   const labels = buildAtollRuntimeLabels(input, runtimeType, gatewayPort);
   for (const [key, value] of Object.entries(labels)) {
     runArgs.push("--label", `${key}=${value}`);
@@ -566,34 +569,21 @@ export async function readRuntimeSharedFile(input: {
   const descriptor = getRuntimeDescriptor(runtimeType);
   const relativePath = sanitizeRuntimeSharedRelativePath(input.relativePath);
   const sharedFilesDir = getRuntimeSharedFilesDir(runtimeType);
-  const exchangeDir = mkdtempSync(join(tmpdir(), "atoll-shared-read-"));
-  const hostFilePath = join(exchangeDir, relativePath);
+  const result = await runtimeVolumeIo.readFile({
+    volumeName: input.volumeName,
+    mountPath: descriptor.dataRoot,
+    filePath: `${sharedFilesDir}/${relativePath}`,
+    label: `read runtime shared file ${input.volumeName}/${relativePath}`
+  });
 
-  try {
-    await runDocker(
-      [
-        "run",
-        "--rm",
-        "--entrypoint",
-        "sh",
-        "-v",
-        `${input.volumeName}:${descriptor.dataRoot}:ro`,
-        "-v",
-        `${exchangeDir}:/atoll-host`,
-        CONFIG_SEED_IMAGE,
-        "-lc",
-        `cp ${toShellSingleQuoted(`${sharedFilesDir}/${relativePath}`)} ${toShellSingleQuoted(`/atoll-host/${relativePath}`)}`
-      ],
-      `read runtime shared file ${input.volumeName}/${relativePath}`
-    );
-
-    return {
-      fileName: relativePath,
-      content: readFileSync(hostFilePath)
-    };
-  } finally {
-    rmSync(exchangeDir, { recursive: true, force: true });
+  if (!result.found) {
+    throw new Error(`Shared file ${relativePath} not found`);
   }
+
+  return {
+    fileName: relativePath,
+    content: result.content
+  };
 }
 
 export async function writeRuntimeSharedFile(input: {
@@ -606,54 +596,34 @@ export async function writeRuntimeSharedFile(input: {
   const descriptor = getRuntimeDescriptor(runtimeType);
   const fileName = sanitizeRuntimeSharedFileName(input.fileName);
   const sharedFilesDir = getRuntimeSharedFilesDir(runtimeType);
-  const exchangeDir = mkdtempSync(join(tmpdir(), "atoll-shared-write-"));
-  const hostFilePath = join(exchangeDir, fileName);
   const uploadedAt = new Date().toISOString();
 
-  try {
-    writeFileSync(hostFilePath, input.content);
-    await ensureRuntimeSharedFilesDir({
-      runtimeType,
-      volumeName: input.volumeName
-    });
-    await runDocker(
-      [
-        "run",
-        "--rm",
-        "--entrypoint",
-        "sh",
-        "-v",
-        `${input.volumeName}:${descriptor.dataRoot}`,
-        "-v",
-        `${exchangeDir}:/atoll-host`,
-        CONFIG_SEED_IMAGE,
-        "-lc",
-        `cp ${toShellSingleQuoted(`/atoll-host/${fileName}`)} ${toShellSingleQuoted(`${sharedFilesDir}/${fileName}`)}`
-      ],
-      `write runtime shared file ${input.volumeName}/${fileName}`
-    );
+  await runtimeVolumeIo.writeFile({
+    volumeName: input.volumeName,
+    mountPath: descriptor.dataRoot,
+    filePath: `${sharedFilesDir}/${fileName}`,
+    content: input.content,
+    label: `write runtime shared file ${input.volumeName}/${fileName}`
+  });
 
-    const nextItem: RuntimeSharedFile = {
-      id: fileName,
-      name: fileName,
-      relativePath: fileName,
-      sizeBytes: input.content.byteLength,
-      uploadedAt
-    };
-    const currentItems = await readRuntimeSharedFilesManifest({
-      runtimeType,
-      volumeName: input.volumeName
-    });
-    const nextItems = [...currentItems.filter((item) => item.relativePath !== fileName), nextItem];
-    await writeRuntimeSharedFilesManifest({
-      runtimeType,
-      volumeName: input.volumeName,
-      items: nextItems
-    });
-    return nextItem;
-  } finally {
-    rmSync(exchangeDir, { recursive: true, force: true });
-  }
+  const nextItem: RuntimeSharedFile = {
+    id: fileName,
+    name: fileName,
+    relativePath: fileName,
+    sizeBytes: input.content.byteLength,
+    uploadedAt
+  };
+  const currentItems = await readRuntimeSharedFilesManifest({
+    runtimeType,
+    volumeName: input.volumeName
+  });
+  const nextItems = [...currentItems.filter((item) => item.relativePath !== fileName), nextItem];
+  await writeRuntimeSharedFilesManifest({
+    runtimeType,
+    volumeName: input.volumeName,
+    items: nextItems
+  });
+  return nextItem;
 }
 
 export async function deleteRuntimeSharedFile(input: {
@@ -666,24 +636,12 @@ export async function deleteRuntimeSharedFile(input: {
   const relativePath = sanitizeRuntimeSharedRelativePath(input.relativePath);
   const sharedFilesDir = getRuntimeSharedFilesDir(runtimeType);
 
-  await ensureRuntimeSharedFilesDir({
-    runtimeType,
-    volumeName: input.volumeName
+  await runtimeVolumeIo.deleteFile({
+    volumeName: input.volumeName,
+    mountPath: descriptor.dataRoot,
+    filePath: `${sharedFilesDir}/${relativePath}`,
+    label: `delete runtime shared file ${input.volumeName}/${relativePath}`
   });
-  await runDocker(
-    [
-      "run",
-      "--rm",
-      "--entrypoint",
-      "sh",
-      "-v",
-      `${input.volumeName}:${descriptor.dataRoot}`,
-      CONFIG_SEED_IMAGE,
-      "-lc",
-      `rm -f ${toShellSingleQuoted(`${sharedFilesDir}/${relativePath}`)}`
-    ],
-    `delete runtime shared file ${input.volumeName}/${relativePath}`
-  );
 
   const currentItems = await readRuntimeSharedFilesManifest({
     runtimeType,
@@ -1820,61 +1778,20 @@ function getRuntimeSharedFilesManifestPath(runtimeType: RuntimeType): string {
   return `${getRuntimeSharedFilesDir(runtimeType)}/.atoll-shared-files.json`;
 }
 
-async function ensureRuntimeSharedFilesDir(input: {
-  runtimeType: RuntimeType;
-  volumeName: string;
-}): Promise<void> {
-  const descriptor = getRuntimeDescriptor(input.runtimeType);
-  const sharedFilesDir = getRuntimeSharedFilesDir(input.runtimeType);
-  await runDocker(
-    [
-      "run",
-      "--rm",
-      "--entrypoint",
-      "sh",
-      "-v",
-      `${input.volumeName}:${descriptor.dataRoot}`,
-      CONFIG_SEED_IMAGE,
-      "-lc",
-      `mkdir -p ${toShellSingleQuoted(sharedFilesDir)}`
-    ],
-    `ensure runtime shared files dir ${input.volumeName}`
-  );
-}
-
 async function readRuntimeSharedFilesManifest(input: {
   runtimeType: RuntimeType;
   volumeName: string;
 }): Promise<RuntimeSharedFile[]> {
   const descriptor = getRuntimeDescriptor(input.runtimeType);
-  const exchangeDir = mkdtempSync(join(tmpdir(), "atoll-shared-manifest-read-"));
-  const manifestHostPath = join(exchangeDir, "manifest.json");
-  const sharedFilesDir = getRuntimeSharedFilesDir(input.runtimeType);
   const manifestPath = getRuntimeSharedFilesManifestPath(input.runtimeType);
+  const result = await runtimeVolumeIo.readFile({
+    volumeName: input.volumeName,
+    mountPath: descriptor.dataRoot,
+    filePath: manifestPath,
+    label: `read runtime shared files manifest ${input.volumeName}`
+  });
 
-  try {
-    await runDocker(
-      [
-        "run",
-        "--rm",
-        "--entrypoint",
-        "sh",
-        "-v",
-        `${input.volumeName}:${descriptor.dataRoot}`,
-        "-v",
-        `${exchangeDir}:/atoll-host`,
-        CONFIG_SEED_IMAGE,
-        "-lc",
-        `mkdir -p ${toShellSingleQuoted(sharedFilesDir)} && if [ -f ${toShellSingleQuoted(manifestPath)} ]; then cp ${toShellSingleQuoted(manifestPath)} /atoll-host/manifest.json; else : > /atoll-host/manifest.json; fi`
-      ],
-      `read runtime shared files manifest ${input.volumeName}`
-    );
-
-    const raw = readFileSync(manifestHostPath, "utf8");
-    return parseRuntimeSharedFilesManifest(raw);
-  } finally {
-    rmSync(exchangeDir, { recursive: true, force: true });
-  }
+  return parseRuntimeSharedFilesManifest(result.found ? result.content.toString("utf8") : "");
 }
 
 async function writeRuntimeSharedFilesManifest(input: {
@@ -1883,32 +1800,14 @@ async function writeRuntimeSharedFilesManifest(input: {
   items: RuntimeSharedFile[];
 }): Promise<void> {
   const descriptor = getRuntimeDescriptor(input.runtimeType);
-  const exchangeDir = mkdtempSync(join(tmpdir(), "atoll-shared-manifest-write-"));
-  const manifestHostPath = join(exchangeDir, "manifest.json");
-  const sharedFilesDir = getRuntimeSharedFilesDir(input.runtimeType);
   const manifestPath = getRuntimeSharedFilesManifestPath(input.runtimeType);
-
-  try {
-    writeFileSync(manifestHostPath, `${JSON.stringify(input.items, null, 2)}\n`, "utf8");
-    await runDocker(
-      [
-        "run",
-        "--rm",
-        "--entrypoint",
-        "sh",
-        "-v",
-        `${input.volumeName}:${descriptor.dataRoot}`,
-        "-v",
-        `${exchangeDir}:/atoll-host`,
-        CONFIG_SEED_IMAGE,
-        "-lc",
-        `mkdir -p ${toShellSingleQuoted(sharedFilesDir)} && cp /atoll-host/manifest.json ${toShellSingleQuoted(manifestPath)}`
-      ],
-      `write runtime shared files manifest ${input.volumeName}`
-    );
-  } finally {
-    rmSync(exchangeDir, { recursive: true, force: true });
-  }
+  await runtimeVolumeIo.writeFile({
+    volumeName: input.volumeName,
+    mountPath: descriptor.dataRoot,
+    filePath: manifestPath,
+    content: Buffer.from(`${JSON.stringify(input.items, null, 2)}\n`, "utf8"),
+    label: `write runtime shared files manifest ${input.volumeName}`
+  });
 }
 
 function parseRuntimeSharedFilesManifest(raw: string): RuntimeSharedFile[] {
@@ -2020,6 +1919,71 @@ async function probeDocker(
       message: formatExecError(error)
     };
   }
+}
+
+async function runDockerBuffer(
+  args: string[],
+  label: string,
+  options: {
+    input?: Buffer;
+    ignoreExitCodes?: number[];
+  } = {}
+): Promise<{ ok: boolean; output: Buffer; message: string }> {
+  const cli = getContainerCli();
+  const ignoreExitCodes = new Set(options.ignoreExitCodes ?? []);
+
+  return await new Promise((resolve, reject) => {
+    const child = spawn(cli, args, {
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    const stdoutChunks: Buffer[] = [];
+    const stderrChunks: Buffer[] = [];
+    const timer = setTimeout(() => {
+      child.kill("SIGTERM");
+    }, 120_000);
+
+    child.stdout.on("data", (chunk) => {
+      stdoutChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    child.stderr.on("data", (chunk) => {
+      stderrChunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    });
+    child.on("error", (error) => {
+      clearTimeout(timer);
+      reject(new Error(`Container CLI command failed (${label}): ${formatExecError(error)}`));
+    });
+    child.on("close", (code) => {
+      clearTimeout(timer);
+      const output = Buffer.concat(stdoutChunks);
+      const stderr = Buffer.concat(stderrChunks).toString("utf8").trim();
+      const message = stderr || output.toString("utf8").trim() || `Container CLI command succeeded (${label})`;
+
+      if (code === 0) {
+        resolve({
+          ok: true,
+          output,
+          message
+        });
+        return;
+      }
+
+      if (code !== null && ignoreExitCodes.has(code)) {
+        resolve({
+          ok: false,
+          output: Buffer.alloc(0),
+          message
+        });
+        return;
+      }
+
+      reject(new Error(`Container CLI command failed (${label}): ${message}`));
+    });
+
+    if (options.input?.byteLength) {
+      child.stdin.write(options.input);
+    }
+    child.stdin.end();
+  });
 }
 
 function formatExecError(error: unknown): string {

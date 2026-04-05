@@ -14,6 +14,7 @@ export type IdentityColorToken = (typeof IDENTITY_COLOR_TOKENS)[number];
 const IDENTITY_COLOR_ALIASES: Record<string, IdentityColorToken> = {
   amber: "gold",
   aqua: "cyan",
+  emerald: "green",
   gray: "neutral",
   grey: "neutral",
   indigo: "purple",

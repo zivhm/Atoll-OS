@@ -1,4 +1,5 @@
 import { BUSINESS_IDENTITY_PRESETS, type AgentPresetCategory } from "./business-identity-presets.js";
+import { normalizeIdentityColorToken } from "./identity-colors.js";
 
 export { type AgentPresetCategory } from "./business-identity-presets.js";
 
@@ -43,7 +44,7 @@ export function buildInitialAgentPresetCatalog(now = new Date().toISOString()): 
     id: preset.id,
     name: preset.name,
     description: preset.description,
-    color: preset.color,
+    color: normalizeIdentityColorToken(preset.color),
     category: preset.category,
     sourceRepoUrl: preset.sourceRepoUrl,
     sourcePath: preset.sourcePath,

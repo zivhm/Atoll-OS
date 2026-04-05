@@ -46,6 +46,7 @@ import {
 import {
   IDENTITY_COLOR_SWATCHES,
   IDENTITY_COLOR_TOKENS,
+  normalizeIdentityColorToken,
   type IdentityColorToken,
 } from "@/lib/identity-colors";
 
@@ -900,7 +901,7 @@ function PaletteChip({
   token: IdentityColorToken;
   compact?: boolean;
 }) {
-  const swatch = IDENTITY_COLOR_SWATCHES[token];
+  const swatch = IDENTITY_COLOR_SWATCHES[normalizeIdentityColorToken(token)];
   return (
     <div className={`flex items-center gap-2 ${compact ? "text-xs" : "text-sm"}`}>
       <span
@@ -934,7 +935,7 @@ function buildPresetDraft(preset: AdminAgentPreset): PresetDraft {
     name: preset.name,
     description: preset.description,
     category: preset.category,
-    color: preset.color as IdentityColorToken,
+    color: normalizeIdentityColorToken(preset.color),
     summary: preset.summary,
     suggestedRoleTitle: preset.suggestedRoleTitle,
     sourceRepoUrl: preset.sourceRepoUrl ?? "",

@@ -77,6 +77,11 @@ export type RuntimeCatalogItem = RuntimeConnector & {
   resolvedImage: string;
 };
 
+const DEFAULT_RUNTIME_HEALTHCHECK_INTERVAL = "3m";
+const DEFAULT_RUNTIME_HEALTHCHECK_TIMEOUT = "10s";
+const DEFAULT_RUNTIME_HEALTHCHECK_START_PERIOD = "15s";
+const DEFAULT_RUNTIME_HEALTHCHECK_RETRIES = "3";
+
 const RUNTIME_ENVIRONMENT: Record<RuntimeType, Record<string, string>> = {
   openclaw: {
     NODE_OPTIONS: "--no-deprecation"
@@ -235,6 +240,29 @@ export function resolveDefaultRuntimeType(
 
 export function resolveRuntimeHealthPath(runtimeType: RuntimeType): string | undefined {
   return getRuntimeConnector(runtimeType).healthPath;
+}
+
+export function resolveRuntimeHealthcheckArgs(
+  runtimeType: RuntimeType,
+  gatewayPort: number
+): string[] {
+  const connector = getRuntimeConnector(runtimeType);
+  if (connector.healthMode !== "http" || !connector.healthPath) {
+    return [];
+  }
+
+  return [
+    "--health-cmd",
+    `node -e "fetch('http://127.0.0.1:${gatewayPort}${connector.healthPath}').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"`,
+    "--health-interval",
+    DEFAULT_RUNTIME_HEALTHCHECK_INTERVAL,
+    "--health-timeout",
+    DEFAULT_RUNTIME_HEALTHCHECK_TIMEOUT,
+    "--health-start-period",
+    DEFAULT_RUNTIME_HEALTHCHECK_START_PERIOD,
+    "--health-retries",
+    DEFAULT_RUNTIME_HEALTHCHECK_RETRIES
+  ];
 }
 
 export function resolveRuntimeLaunchArgs(

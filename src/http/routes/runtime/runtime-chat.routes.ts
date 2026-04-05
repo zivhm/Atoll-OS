@@ -9,6 +9,7 @@ import { parsePositiveIntegerUnknown, parseRuntimeChatInput } from "../../../par
 import type { RuntimeChatMessage, RuntimeInstance, RuntimeType } from "../../../store.js";
 import { hasTimeout, resolveTimeoutSignal } from "../http-timeout.js";
 import { resolveRuntimeHttpBaseUrl } from "./runtime-base-url.js";
+import { resolveRuntimeWebSocketCtor } from "./runtime-websocket.js";
 
 import type { RuntimeRouteDeps } from "./types.js";
 
@@ -930,7 +931,8 @@ function matchesOpenClawTerminalChatPayload(value: unknown, runId: string): bool
 
 async function openGatewaySocket(url: string, timeoutMs: number): Promise<BufferedJsonSocket> {
   return await new Promise<BufferedJsonSocket>((resolve, reject) => {
-    const socket = new WebSocket(url);
+    const RuntimeWebSocket = resolveRuntimeWebSocketCtor();
+    const socket = new RuntimeWebSocket(url);
     let settled = false;
 
     const timer = hasTimeout(timeoutMs)
