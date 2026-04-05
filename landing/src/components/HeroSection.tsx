@@ -42,7 +42,7 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.2 }}
         >
-          Atoll is a digital assistant that adapts to your workflow, learns your preferences, and manages the chaos so you can focus on what truly matters.
+          Atoll is an agent management tool that is aimed to offload the process of creating agents from scratch, so you can focus on what truly matters. your work.
         </motion.p>
 
         <motion.div

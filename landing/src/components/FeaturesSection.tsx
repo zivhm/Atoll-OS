@@ -2,6 +2,7 @@ import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
 import { featureCards } from "@/content";
+import { useTheme } from "@/hooks/use-theme";
 
 const fadeUp = {
   hidden: { opacity: 0, y: 30 },
@@ -17,15 +18,18 @@ const fadeUp = {
 };
 
 export function FeaturesSection() {
-  const heroImageUrl = `${import.meta.env.BASE_URL}images/atoll-hero.png`;
+  const { theme } = useTheme();
+  const backgroundImageName = theme === "dark" ? "atoll-night.png" : "atoll-day.png";
+  const heroImageUrl = `${import.meta.env.BASE_URL}images/${backgroundImageName}`;
 
   return (
-    <section id="features" className="relative overflow-hidden px-6 py-24">
+    <section id="features" className="relative z-0 overflow-hidden px-6 py-24">
       <div
-        className="absolute inset-0 bg-cover bg-center"
+        data-testid="features-background"
+        className="absolute inset-0 z-0 scale-[1.03] bg-cover bg-center bg-fixed"
         style={{ backgroundImage: `url('${heroImageUrl}')` }}
       />
-      <div className="absolute inset-0 bg-background/18" />
+      <div className="absolute inset-0 z-0 bg-background/12" />
       <div className="edge-fade-top edge-fade-strong" />
       <div className="edge-fade-bottom edge-fade-strong" />
 
@@ -34,7 +38,7 @@ export function FeaturesSection() {
           {featureCards.map((feature, index) => (
             <motion.article
               key={feature.title}
-              className={`group relative flex h-[25rem] flex-col justify-between overflow-hidden rounded-[3rem] p-10 ${
+              className={`relative flex h-[25rem] flex-col justify-between overflow-hidden rounded-[3rem] p-10 ${
                 feature.wide ? "lg:col-span-2" : ""
               }`}
               initial="hidden"
@@ -42,7 +46,6 @@ export function FeaturesSection() {
               viewport={{ once: true }}
               variants={fadeUp}
               custom={index}
-              whileHover={{ y: -8, transition: { duration: 0.25, ease: "easeOut" } }}
             >
               <div className="glass-panel absolute inset-0 rounded-[3rem]" />
               <div className="relative z-10 flex h-full flex-col justify-between">
@@ -61,6 +64,11 @@ export function FeaturesSection() {
               </div>
             </motion.article>
           ))}
+          <div
+            data-testid="features-spacer"
+            aria-hidden="true"
+            className="hidden h-[25rem] rounded-[3rem] opacity-0 pointer-events-none lg:block lg:col-span-2"
+          />
         </div>
       </div>
     </section>
@@ -73,7 +81,7 @@ function FeatureLink({ href, children }: { href: string; children: React.ReactNo
   return (
     <a
       href={href}
-      className="mt-6 inline-flex w-fit items-center gap-2 text-sm font-bold text-primary transition-transform group-hover:translate-x-1"
+      className="mt-6 inline-flex w-fit items-center gap-2 text-sm font-bold text-primary"
       target={isExternal ? "_blank" : undefined}
       rel={isExternal ? "noreferrer" : undefined}
     >

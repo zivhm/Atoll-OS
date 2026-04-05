@@ -1,17 +1,23 @@
 import {
-  BarChart3,
   Globe,
+  type LucideIcon,
   MessageSquareText,
-  ShieldCheck,
   Zap,
 } from "lucide-react";
 
-import { ATOLL_GITHUB_URL } from "@/constants";
+export interface FeatureCard {
+  icon: LucideIcon;
+  title: string;
+  description: string;
+  href?: string;
+  linkLabel?: string;
+  wide?: boolean;
+}
 
-export const featureCards = [
+export const featureCards: FeatureCard[] = [
   {
     icon: Zap,
-    title: "The Quick Deployer",
+    title: "Quick Agent Setup",
     description:
       "Spin up fully configured AI agents in minutes. Define goals, connect tools, and let Atoll handle the orchestration end-to-end.",
     linkLabel: "See how it works",
@@ -21,39 +27,24 @@ export const featureCards = [
     icon: MessageSquareText,
     title: "Conversational Intelligence",
     description:
-      "Atoll understands context, remembers past interactions, and adapts its responses to match your communication style and business needs.",
-    wide: true,
-  },
-  {
-    icon: BarChart3,
-    title: "Performance Analytics",
-    description:
-      "Track agent accuracy, task completion rates, lifecycle health, and operator-visible logs so you can see exactly what the control plane is doing.",
-    linkLabel: "Browse the repo",
-    href: ATOLL_GITHUB_URL,
+      "Your helpers understands context, remembers past interactions, and adapts its responses to match your communication style and business needs. ",
   },
   {
     icon: Globe,
     title: "Multi-Channel Reach",
     description:
-      "Deploy agents across Slack, email, web chat, and APIs. One agent, every channel with consistent quality and operator-visible behavior.",
-  },
-  {
-    icon: ShieldCheck,
-    title: "Operator-Visible Security",
-    description:
-      "Atoll emphasizes explicit access controls, runtime diagnostics, and self-hosted configuration ownership so operators can verify real behavior.",
+      "Deploy agents across Telegram, email, web chat, and APIs.",
   },
 ] as const;
 
 export const identityPresets = {
   operator: {
-    name: "Operator Companion",
-    category: "Control Plane",
+    name: "Operation Manager",
+    category: "Operations",
     summary:
-      "A calm helper for runtime operations, runbooks, and incident follow-through.",
-    roleTitle: "Operator-first control plane copilot",
-    skills: ["Runbook drafting", "Runtime health triage", "Change summaries"],
+      "A dedicated assistant for managing operational tasks and workflows.",
+    roleTitle: "Operations-first copilot",
+    skills: ["Runbook drafting", "Fleet runtime monitoring", "Scheduling tasks"],
   },
   strategist: {
     name: "Strategic Advisor",
@@ -75,12 +66,22 @@ export const identityPresets = {
 
 export const faqs = [
   {
-    question: "Is Atoll self-hostable?",
+    question: "Is Atoll a paid service?",
     answer:
-      "Yes. The repo is built around operator-visible runtime ownership, explicit credentials, and local-first workflows.",
+      "No. The repo is built to be easy to self host and manage, No costs, No strings attached.",
   },
   {
-    question: "Does setup need a long workflow?",
+    question: "How does Atoll stay observable?",
+    answer:
+      "It keeps runtime behavior close to the operator: health signals, tool activity, and helper state are meant to stay inspectable instead of disappearing behind a black box.",
+  },
+  {
+    question: "Can the helper work across channels?",
+    answer:
+      "Yes. Atoll is designed so one helper can carry the same identity and operational posture across chat surfaces, APIs, and internal workflows.",
+  },
+  {
+    question: "Do I need any technical knowledge to use Atoll?",
     answer:
       "No. The landing keeps setup minimal on purpose: name the helper, pick the operating posture, and start from a clear identity.",
   },

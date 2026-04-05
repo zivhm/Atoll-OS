@@ -1,13 +1,13 @@
 import { motion } from "framer-motion";
 import { useMemo, useState } from "react";
 
-import elizaHelper from "@/assets/eliza-helper.png";
 import { identityPresets, type IdentityPresetKey } from "@/content";
 
 export function CustomizationSection() {
   const [selectedPreset, setSelectedPreset] = useState<IdentityPresetKey>("operator");
   const [helperName, setHelperName] = useState("Eliza");
   const currentPreset = useMemo(() => identityPresets[selectedPreset], [selectedPreset]);
+  const elizaHelper = `${import.meta.env.BASE_URL}images/eliza-helper.png`;
 
   return (
     <section id="customization" className="px-6 py-24">
@@ -21,7 +21,7 @@ export function CustomizationSection() {
         >
           <h2 className="mb-6 text-4xl font-bold md:text-5xl">Shape the helper around your workflow.</h2>
           <p className="mx-auto max-w-3xl text-xl text-muted-foreground">
-            Give Atoll a clear role, a clear voice, and a helper that feels like it belongs in your stack from the first reply.
+            Give your helper a clear role and feel as if it was part of your team stack from the first reply.
           </p>
         </motion.div>
 
