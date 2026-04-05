@@ -35,8 +35,10 @@ jobs:
 
       - name: Install dependencies
         run: |
-          rm -rf node_modules
-          npm install --include=optional
+          npm ci
+          ROLLUP_VERSION=$(node -p "require('./package-lock.json').packages['node_modules/rollup'].version")
+          SWC_VERSION=$(node -p "require('./package-lock.json').packages['node_modules/@swc/core'].version")
+          npm install --no-save "@rollup/rollup-linux-x64-gnu@${ROLLUP_VERSION}" "@swc/core-linux-x64-gnu@${SWC_VERSION}"
 
       - name: Verify native build dependencies
         run: |
