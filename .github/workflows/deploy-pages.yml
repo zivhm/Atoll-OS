@@ -35,9 +35,13 @@ jobs:
 
       - name: Install dependencies
         run: |
-          npm ci
-          npm i --no-save @rollup/rollup-linux-x64-gnu
-          npm i --no-save @swc/core-linux-x64-gnu
+          rm -rf node_modules
+          npm install --include=optional
+
+      - name: Verify native build dependencies
+        run: |
+          node -e "require.resolve('@rollup/rollup-linux-x64-gnu')"
+          node -e "require('@swc/core')"
 
       - name: Build web for Pages base path
         env:
