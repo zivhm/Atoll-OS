@@ -3,6 +3,7 @@ import { HeroSection } from "@/components/HeroSection";
 import { LandingNav } from "@/components/LandingNav";
 import { FAQSection } from "@/components/FAQSection";
 import { FeaturesSection } from "@/components/FeaturesSection";
+import { ScreenshotsSection } from "@/components/ScreenshotsSection";
 import { CustomizationSection } from "@/components/CustomizationSection";
 import { ThemeProvider } from "@/hooks/use-theme";
 
@@ -15,6 +16,7 @@ export default function App() {
           <HeroSection />
           <FeaturesSection />
           <CustomizationSection />
+          <ScreenshotsSection />
           <FAQSection />
         </main>
         <FooterSection />

@@ -42,10 +42,10 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.2 }}
         >
-          An atoll is a ring-shaped island that creates a calm, a protected space in the middle of the ocean.
+          An atoll is a ring-shaped island that creates a calm, protected space in the middle of the ocean.
           <br className="block mt-4" />
           <br className="block mt-4" />
-          Atoll creates that for your helpers, handling the setup and keeping everything running, so you can focus on your work.
+          Atoll-OS creates that for your helpers, handling the setup and keeping everything running, so you can focus on your work.
         </motion.p>
 
         <motion.div

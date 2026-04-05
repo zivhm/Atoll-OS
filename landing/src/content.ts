@@ -68,10 +68,10 @@ export const faqs = [
   {
     question: "Is Atoll a paid service?",
     answer:
-      "No. The repo is built to be easy to self host and manage, No costs, No strings attached.",
+      "No. The repo is built to be easy to self host and manage, You only pay for your API key usage.",
   },
   {
-    question: "How does Atoll stay observable?",
+    question: "How does Atoll stay on track with all the helpers?",
     answer:
       "It keeps runtime behavior close to the operator: health signals, tool activity, and helper state are meant to stay inspectable instead of disappearing behind a black box.",
   },
@@ -86,7 +86,7 @@ export const faqs = [
       "No. The landing keeps setup minimal on purpose: name the helper, pick the operating posture, and start from a clear identity.",
   },
   {
-    question: "What is the main use case right now?",
+    question: "What is the main use case?",
     answer:
       "Running helpers with real operational context, predictable tools, and observable runtime behavior instead of generic chat personas.",
   },

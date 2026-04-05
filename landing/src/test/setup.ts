@@ -31,3 +31,14 @@ Object.defineProperty(window, "IntersectionObserver", {
   writable: true,
   value: IntersectionObserverMock,
 });
+
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+Object.defineProperty(window, "ResizeObserver", {
+  writable: true,
+  value: ResizeObserverMock,
+});
