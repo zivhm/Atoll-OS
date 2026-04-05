@@ -14,9 +14,7 @@ Atoll removes the busywork of creating and managing helpers, so you can focus on
 
 [Landing page](https://zivhm.github.io/Atoll-OS/) · [Quick start](#quick-start) · [Docker Compose](#docker-compose) · [Core concepts](#core-concepts) · [Configuration](#configuration)
 
-| Atoll control plane |
-| :---: |
-| ![Atoll control plane](web/public/images/landing.png) |
+![Atoll control plane](web/public/images/landing.png) 
 
 ## App Preview
 
