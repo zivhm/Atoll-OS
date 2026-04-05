@@ -9,7 +9,7 @@
 [Landing page](https://zivhm.github.io/Atoll-OS/) · [Quick start](#-quick-start) · [Docker Compose](#-docker-compose) · [Core concepts](#-core-concepts) · [Configuration](#%EF%B8%8F-configuration)
 
 [![Live site](https://img.shields.io/badge/site-live-22A4B4?style=flat-square)](https://zivhm.github.io/Atoll-OS/)
-[![Deploy](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml/badge.svg?style=flat-square)](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml)
+[![Deploy](https://img.shields.io/github/actions/workflow/status/zivhm/Atoll-OS/deploy-pages.yml?style=flat-square&label=deploy)](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml)
 [![License](https://img.shields.io/github/license/zivhm/Atoll-OS?style=flat-square)](LICENSE)
 
 ![Self-hosted](https://img.shields.io/badge/self--hosted-control%20plane-1C1F2A?style=flat-square)
@@ -18,20 +18,6 @@
 ![API](https://img.shields.io/badge/api-Fastify%20%2B%20TypeScript-000000?style=flat-square)
 
 </div>
-
----
-
-## App Preview
-
-![Chat view](landing/public/images/chat.png)
-
-<table>
-  <tr>
-    <td><img src="landing/public/images/setup-1.png" alt="Helper setup" /></td>
-    <td><img src="landing/public/images/set-d.png" alt="Helper settings" /></td>
-    <td><img src="landing/public/images/ids-d.png" alt="Identity catalog" /></td>
-  </tr>
-</table>
 
 ---
 
@@ -66,6 +52,21 @@ The underlying runtime is unchanged. We just give it a purpose before you ever o
 | **Runtime operations** | Inspect health, logs, events, repair actions, and reconcile flows |
 | **Channel wiring** | Expose Telegram and Discord settings without spreading config across tools |
 | **Single-host** | Run locally during development or in Docker Compose for a self-hosted deployment |
+
+---
+
+
+## App Preview
+
+![Chat view](landing/public/images/chat.png)
+
+<table>
+  <tr>
+    <td><img src="landing/public/images/setup-1.png" alt="Helper setup" /></td>
+    <td><img src="landing/public/images/set-d.png" alt="Helper settings" /></td>
+    <td><img src="landing/public/images/ids-d.png" alt="Identity catalog" /></td>
+  </tr>
+</table>
 
 ---
 
