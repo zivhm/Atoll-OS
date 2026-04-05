@@ -1,13 +1,13 @@
 # Atoll OS
 
-Atoll is a self-hosted control plane for managing AI helpers backed by Docker-managed runtimes. It combines a Fastify API, a React web console, a reusable identity catalog, and runtime orchestration.
+Atoll is a self-hosted control plane for managing AI helpers backed by Docker-managed runtimes. It combines a Fastify API, a React web console, a reusable identity catalog, and runtime orchestration around an OpenClaw-based helper runtime.
 
 The current implementation is optimized for local or single-host operation: create helpers, assign them to a default or dedicated workspace, provision a runtime, configure channels, and operate the helper from the browser UI.
 
 ## What It Does
 
 - Creates and manages helpers inside shared or dedicated workspaces.
-- Provisions Docker-backed `openclaw` and `zeroclaw` runtimes.
+- Provisions Docker-backed OpenClaw helper runtimes.
 - Persists app state locally in `atoll-state.json` or a configured data path.
 - Stores sensitive runtime credentials behind an app-level secrets key.
 - Supports runtime chat, health checks, logs, repair, reconcile, and event history.
@@ -37,12 +37,9 @@ A helper is the user-facing agent record: name, avatar, role title, preset, skil
 
 ### Runtimes
 
-A runtime is the managed execution environment attached to a helper. This repo currently supports:
+A runtime is the managed execution environment attached to a helper. The current public support target is `openclaw`.
 
-- `openclaw`
-- `zeroclaw`
-
-Atoll provisions these runtimes through Docker, tracks their status, and exposes lifecycle actions through the API and UI.
+Atoll provisions the current helper runtime through Docker, tracks its status, and exposes lifecycle actions through the API and UI. The long-term direction is harness-agnostic support rather than coupling the control plane to a single runtime forever.
 
 ### Identities
 
@@ -125,7 +122,7 @@ Most day-to-day configuration comes from the repo-root `.env`.
 | `RUNTIME_PROVIDER` | No | Default LLM provider for newly provisioned helpers |
 | `RUNTIME_MODEL` | No | Default LLM model for newly provisioned helpers |
 | `RUNTIME_OPENCLAW_IMAGE` | No | OpenClaw runtime image override |
-| `RUNTIME_ZEROCLAW_IMAGE` | No | ZeroClaw runtime image override |
+| `RUNTIME_ZEROCLAW_IMAGE` | No | Reserved image override for future harness support |
 | `RUNTIME_STARTUP_VALIDATION` | No | Runtime prerequisite validation mode: `strict`, `warn`, or `off` |
 | `RUNTIME_ALLOW_PUBLIC_BIND` | No | Whether helper gateways bind to host loopback by default |
 | `RUNTIME_REQUIRE_PAIRING` | No | Whether pairing is required for runtimes that support it |
@@ -202,7 +199,8 @@ The frontend currently uses these APIs for:
 
 ## Current Runtime Behavior
 
-- Supported runtimes: OpenClaw and ZeroClaw
+- Current supported runtime: OpenClaw
+- Intended direction: harness-agnostic runtime support over time
 - Default runtime type: `openclaw`
 - Default hosted provider: `openrouter`
 - Default hosted model: `anthropic/claude-sonnet-4.6`
