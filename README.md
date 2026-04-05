@@ -1,6 +1,6 @@
 # Atoll OS
 
-Atoll is a self-hosted control plane for managing AI helpers backed by Docker-managed runtimes. It combines a Fastify API, a React web console, a reusable identity catalog, and runtime orchestration for OpenClaw and ZeroClaw in one repo.
+Atoll is a self-hosted control plane for managing AI helpers backed by Docker-managed runtimes. It combines a Fastify API, a React web console, a reusable identity catalog, and runtime orchestration.
 
 The current implementation is optimized for local or single-host operation: create helpers, assign them to a default or dedicated workspace, provision a runtime, configure channels, and operate the helper from the browser UI.
 
