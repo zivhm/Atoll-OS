@@ -42,7 +42,7 @@ export function HeroSection() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.2 }}
         >
-          Atoll removes the busywork of creating and managing helpers, so you can focus on your work.
+          An atoll is a ring-shaped island that creates a calm, protected space in the middle of the ocean. Atoll creates that same space for your helpers, handling the setup and keeping everything running, so you can focus on your work.
         </motion.p>
 
         <motion.div
