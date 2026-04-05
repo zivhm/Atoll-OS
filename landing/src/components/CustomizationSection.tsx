@@ -19,7 +19,7 @@ export function CustomizationSection() {
           viewport={{ once: true }}
           transition={{ duration: 0.5 }}
         >
-          <h2 className="mb-6 text-4xl font-bold md:text-5xl">Shape the helper around your workflow.</h2>
+          <h2 className="mb-6 text-4xl font-bold md:text-5xl">Shape your helper to match your workflow.</h2>
           <p className="mx-auto max-w-3xl text-xl text-muted-foreground">
             Give your helper a clear role and feel as if it was part of your team stack from the first reply.
           </p>
