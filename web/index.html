@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Atoll</title>
+    <meta
+      name="description"
+      content="Atoll pairs the product UI with helper provisioning, runtime diagnostics, and lifecycle operations."
+    />
+    <meta name="author" content="Atoll" />
+
+    <meta property="og:title" content="Atoll" />
+    <meta
+      property="og:description"
+      content="Provision helpers, inspect runtime health, and operate helper runtimes from Atoll."
+    />
+    <meta property="og:type" content="website" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:site" content="@Atoll" />
+    <meta
+      name="twitter:title"
+      content="Atoll"
+    />
+    <meta
+      name="twitter:description"
+      content="Provision helpers, inspect runtime health, and operate helper runtimes from Atoll."
+    />
+    <script>
+      (function() {
+        var theme = localStorage.getItem('atoll-theme');
+        if (!theme) {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        if (theme === 'dark') {
+          document.documentElement.classList.add('dark');
+          var s = document.createElement('style');
+          s.id = 'atoll-theme-override';
+          s.textContent = ':root{--background:0 0% 6%!important;--foreground:0 0% 96%!important;--card:0 0% 10%!important;--card-foreground:0 0% 96%!important;--popover:0 0% 10%!important;--popover-foreground:0 0% 96%!important;--secondary:0 0% 14%!important;--secondary-foreground:0 0% 90%!important;--muted:0 0% 14%!important;--muted-foreground:0 0% 65%!important;--destructive:0 62% 50%!important;--destructive-foreground:0 0% 100%!important;--border:0 0% 15%!important;--input:0 0% 15%!important;--sidebar-background:0 0% 5%!important;--sidebar-foreground:0 0% 90%!important;--sidebar-accent:0 0% 12%!important;--sidebar-accent-foreground:0 0% 90%!important;--sidebar-border:0 0% 12%!important;color-scheme:dark}';
+          document.head.appendChild(s);
+        }
+      })();
+    </script>
+  </head>
+
+  <body>
+    <div id="root"></div>
+    <script src="https://mcp.figma.com/mcp/html-to-design/capture.js" async></script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

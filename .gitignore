@@ -1,0 +1,73 @@
+# Environment files
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# Dependencies and build output
+node_modules/
+**/node_modules/
+dist/
+**/dist/
+dist-ssr/
+**/dist-ssr/
+coverage/
+**/coverage/
+tmp/
+output/
+.playwright-cli/
+*.tsbuildinfo
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Runtime state and local artifacts
+**/atoll-state.json
+**/atoll-state.json
+*.session
+tg.seed.session
+reports/
+**/reports/
+ignored/
+**/ignored/
+.ignored/
+**/.ignored/
+.agents/
+**/.agents/
+skills-lock.json
+
+# Python helpers
+__pycache__/
+**/__pycache__/
+*.pyc
+.venv/
+**/.venv/
+.venv-linux/
+**/.venv-linux/
+
+# Editor and OS files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.local
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Local package manager files
+bun.lockb
+AGENTS.md
+artifacts/
+.worktrees/
+docs/*

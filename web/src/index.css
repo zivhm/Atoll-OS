@@ -1,0 +1,201 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 25% 97%;
+    --foreground: 220 27% 12%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 220 27% 12%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 27% 12%;
+
+    --primary: 194 85% 40%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 190 64% 94%;
+    --secondary-foreground: 220 27% 12%;
+
+    --muted: 210 24% 95%;
+    --muted-foreground: 215 16% 42%;
+
+    --accent: 190 78% 94%;
+    --accent-foreground: 193 78% 34%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 214 24% 88%;
+    --input: 214 22% 84%;
+    --ring: 194 85% 40%;
+
+    --radius: 1.25rem;
+    --radius-control: 0.7rem;
+    --radius-panel: 1.4rem;
+    --space-page-x: 1rem;
+    --space-page-y: 2rem;
+    --space-section: 1.5rem;
+
+    --sidebar-background: 220 26% 14%;
+    --sidebar-foreground: 210 40% 96%;
+    --sidebar-primary: 186 74% 40%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 220 26% 20%;
+    --sidebar-accent-foreground: 210 40% 96%;
+    --sidebar-border: 220 20% 22%;
+    --sidebar-ring: 186 74% 40%;
+  }
+
+  .dark,
+  [data-theme="dark"] {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 96%;
+
+    --card: 0 0% 11%;
+    --card-foreground: 0 0% 96%;
+
+    --popover: 0 0% 11%;
+    --popover-foreground: 0 0% 96%;
+
+    --primary: 194 84% 44%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 90%;
+
+    --muted: 0 0% 13%;
+    --muted-foreground: 0 0% 60%;
+
+    --accent: 0 0% 12%;
+    --accent-foreground: 193 92% 64%;
+
+    --destructive: 0 62% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 17%;
+    --input: 0 0% 17%;
+    --ring: 194 84% 44%;
+
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 90%;
+    --sidebar-primary: 185 82% 47%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 12%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 0 0% 12%;
+    --sidebar-ring: 185 82% 47%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    background-image:
+      radial-gradient(circle at top left, hsl(var(--primary) / 0.06), transparent 24rem),
+      linear-gradient(180deg, hsl(var(--background)), hsl(var(--background)));
+  }
+  h1, h2, h3, h4, h5, h6 {
+    font-family: 'Plus Jakarta Sans', sans-serif;
+    font-weight: 700;
+  }
+}
+
+@layer components {
+  .page-container {
+    @apply mx-auto w-full px-4 sm:px-6 lg:px-8;
+    padding-top: var(--space-page-y);
+    padding-bottom: var(--space-page-y);
+  }
+
+  .surface-panel {
+    @apply border border-border/80 bg-card;
+    border-radius: var(--radius-panel);
+  }
+
+  .section-title {
+    @apply text-[10px] font-semibold uppercase tracking-[0.22em] text-primary/75;
+  }
+
+  .stack-section {
+    @apply space-y-4;
+  }
+
+  .stack-field {
+    @apply space-y-2;
+  }
+
+  .atoll-shell {
+    @apply relative min-h-screen overflow-hidden;
+  }
+
+  .atoll-page-grid {
+    min-height: calc(100vh - 68px);
+  }
+
+  .atoll-top-nav-item {
+    @apply inline-flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-medium text-muted-foreground transition-colors;
+  }
+
+  .atoll-top-nav-item:hover {
+    @apply text-foreground;
+  }
+
+  .atoll-top-nav-item.is-active {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  .atoll-card-grid {
+    @apply grid gap-5 md:grid-cols-2 xl:grid-cols-3;
+  }
+
+  .atoll-section-rule {
+    @apply flex items-center gap-4;
+  }
+
+  .atoll-section-rule::after {
+    content: "";
+    @apply h-px flex-1 bg-border/80;
+  }
+
+  .atoll-rail-button {
+    @apply flex w-full items-center gap-3 rounded-2xl px-4 py-3 text-left text-sm font-medium text-muted-foreground transition-colors;
+  }
+
+  .atoll-rail-button.is-active {
+    @apply bg-accent text-accent-foreground;
+  }
+
+  .atoll-tab-pill {
+    @apply rounded-[10px] border border-border/65 bg-card px-3 py-1.5 text-[11px] font-medium text-muted-foreground transition-colors;
+  }
+
+  .atoll-tab-pill[data-active="true"] {
+    @apply border-primary/25 bg-primary/10 text-foreground;
+  }
+}
+
+@layer utilities {
+  .shadow-sm,
+  .shadow,
+  .shadow-md,
+  .shadow-lg,
+  .shadow-xl,
+  .shadow-2xl {
+    box-shadow: none !important;
+  }
+
+  [class*="shadow-["] {
+    box-shadow: none !important;
+  }
+}
