@@ -11,35 +11,21 @@
 ![Web](https://img.shields.io/badge/web-React%20%2B%20Vite-61DAFB?style=flat-square)
 ![API](https://img.shields.io/badge/api-Fastify%20%2B%20TypeScript-000000?style=flat-square)
 
-**Meet your next favorite employee.**
+![Atoll control plane](web/public/images/landing.png)
 
 Atoll removes the busywork of creating and managing AI helpers, so you can focus on your work.
 
 [Landing page](https://zivhm.github.io/Atoll-OS/) · [Quick start](#-quick-start) · [Docker Compose](#-docker-compose) · [Core concepts](#-core-concepts) · [Configuration](#%EF%B8%8F-configuration)
 
-![Atoll control plane](web/public/images/landing.png)
-
 </div>
 
 ---
 
-## 🖼 App Preview
-
-| Helper setup | Runtime operations |
-| :---: | :---: |
-| `Placeholder` | `Placeholder` |
-
-| Identity catalog | Channel configuration |
-| :---: | :---: |
-| `Placeholder` | `Placeholder` |
-
----
-
-## Why Atoll
+## 🏝️ Why Atoll
 
 Most agent projects focus on the helper itself. **Atoll focuses on the operating layer around it.**
 
-- 🗂 Create helpers with reusable identities, role definitions, and skill/tool context
+- 🤖 Create helpers with reusable identities, role definitions, and skill/tool context
 - 🐳 Provision Docker-backed runtimes without hand-wiring every instance
 - 🔗 Place helpers in shared or dedicated workspaces
 - 💬 Configure Telegram and Discord channels from the same UI
