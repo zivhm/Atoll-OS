@@ -9,7 +9,7 @@
 [Landing page](https://zivhm.github.io/Atoll-OS/) · [Quick start](#-quick-start) · [Docker Compose](#-docker-compose) · [Core concepts](#-core-concepts) · [Configuration](#%EF%B8%8F-configuration)
 
 [![Live site](https://img.shields.io/badge/site-live-22A4B4?style=flat-square)](https://zivhm.github.io/Atoll-OS/)
-[![Deploy](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml/badge.svg?style=flat-square)](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml)
+[![Deploy](https://img.shields.io/github/actions/workflow/status/zivhm/Atoll-OS/deploy-pages.yml?style=flat-square&label=deploy)](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml)
 [![License](https://img.shields.io/github/license/zivhm/Atoll-OS?style=flat-square)](LICENSE)
 
 ![Self-hosted](https://img.shields.io/badge/self--hosted-control%20plane-1C1F2A?style=flat-square)
