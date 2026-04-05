@@ -25,7 +25,7 @@ export default defineConfig(({ mode }) => {
       postcss: path.resolve(__dirname, "postcss.config.js"),
     },
     server: {
-      host: "::",
+      host: "127.0.0.1",
       port: 8080,
       hmr: {
         overlay: false,

@@ -1,6 +1,6 @@
-import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Zap, MessageSquareText, BarChart3, Globe, ShieldCheck, ArrowRight } from "lucide-react";
+import { ATOLL_GITHUB_URL } from "@/components/landing/constants";
 
 const features = [
   {
@@ -20,16 +20,14 @@ const features = [
   {
     icon: BarChart3,
     title: "Performance Analytics",
-    description: "Track agent accuracy, task completion rates, and time saved with real-time dashboards that highlight what's working and what needs tuning.",
-    link: "View dashboard",
-    href: "/dashboard",
+    description: "Track agent accuracy, task completion rates, lifecycle health, and operator-visible logs so you can see exactly what the control plane is doing.",
+    link: "Browse the repo",
+    href: ATOLL_GITHUB_URL,
   },
   {
     icon: Globe,
     title: "Multi-Channel Reach",
     description: "Deploy agents across Slack, email, web chat, and APIs. One agent, every channel — with consistent quality and brand voice.",
-    link: "Explore channels",
-    href: "#integrations",
   },
   {
     icon: ShieldCheck,
@@ -128,10 +126,18 @@ function FeatureLink({ href, children }: { href?: string; children: React.ReactN
     );
   }
 
+  if (href.startsWith("http://") || href.startsWith("https://")) {
+    return (
+      <a href={href} className={className} target="_blank" rel="noreferrer">
+        {children}
+      </a>
+    );
+  }
+
   return (
-    <Link to={href} className={className}>
+    <a href={href} className={className}>
       {children}
-    </Link>
+    </a>
   );
 }
 

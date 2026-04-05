@@ -1,6 +1,7 @@
 import { motion } from "framer-motion";
-import { TrendingUp, Code2, Megaphone, BarChart3, LucideIcon, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+
+import elizaHelper from "@/assets/eliza-helper.png";
 import {
   Select,
   SelectContent,
@@ -8,77 +9,61 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-const AGENT_PRESETS = {
-  sales: {
-    name: "Revenue Accelerator",
-    defaultAgentName: "Atlas",
-    tone: "Energetic",
-    color: "bg-primary",
-    icon: TrendingUp,
-    greeting: "Good morning! I've analyzed this quarter's pipeline and identified 3 high-value opportunities. Ready to dive in?",
-    response: "Perfect. I'll prioritize the enterprise deal and draft personalized outreach for the C-suite contacts. Keeping it energetic and value-focused.",
-    knowledgeFocus: ["Sales Methodology", "Pipeline Analysis", "CRM Optimization"],
+const IDENTITY_PRESETS = {
+  operator: {
+    name: "Operator Companion",
+    category: "Control Plane",
+    summary: "A calm helper for runtime operations, runbooks, and incident follow-through.",
+    description:
+      "Keeps the control plane legible, turns health signals into action, and writes back the context operators need to trust the next step.",
+    roleTitle: "Operator-first control plane copilot",
+    skills: ["Runbook drafting", "Runtime health triage", "Change summaries"],
+    seedFiles: {
+      identity: "Ground the helper in Atoll's operator-first voice and execution style.",
+      soul: "Bias toward calm diagnosis, explicit next steps, and traceable reasoning.",
+      tools: "Prefer observable actions: logs, runtime status, events, diagnostics, and repo context.",
+    },
   },
-  developer: {
-    name: "Engineering Copilot",
-    defaultAgentName: "Axiom",
-    tone: "Minimalist",
-    color: "bg-indigo-500",
-    icon: Code2,
-    greeting: "Morning. Found a performance bottleneck in the API layer. I've prepared optimization suggestions with benchmarks.",
-    response: "Got it. I'll refactor the query batching logic and run tests. Documentation will be technical and concise.",
-    knowledgeFocus: ["Code Architecture", "System Design", "DevOps"],
-  },
-  social: {
-    name: "Brand Catalyst",
-    defaultAgentName: "Echo",
-    tone: "Approachable",
-    color: "bg-rose-500",
-    icon: Megaphone,
-    greeting: "Hey! Your latest post is trending—engagement is up 40%. I've drafted follow-up content to keep the momentum going.",
-    response: "Love it! I'll schedule those posts and add some engaging visuals. Tone will be friendly and conversational throughout.",
-    knowledgeFocus: ["Content Strategy", "Audience Growth", "Brand Voice"],
-  },
-  analyst: {
+  strategist: {
     name: "Strategic Advisor",
-    defaultAgentName: "Cipher",
-    tone: "Professional",
-    color: "bg-emerald-500",
-    icon: BarChart3,
-    greeting: "Good morning. I've prepared a high-level briefing of today's market shifts. I also noticed a meeting conflict for 2 PM — should I resolve it?",
-    response: "That would be excellent. Please prioritize the stakeholder call and reschedule the internal sync. Keep the tone formal for the outreach.",
-    knowledgeFocus: ["Financial Modeling", "Market Intelligence", "Risk Analysis"],
+    category: "Planning",
+    summary: "Synthesizes context into decisions, follow-ups, and concise executive notes.",
+    description:
+      "Reads the room, tracks commitments, and turns scattered context into a plan you can actually move on.",
+    roleTitle: "Decision-support and planning partner",
+    skills: ["Decision briefs", "Meeting prep", "Stakeholder follow-through"],
+    seedFiles: {
+      identity: "Position the helper as a measured planner with strong context retention.",
+      soul: "Optimize for clarity, tradeoffs, and realistic sequencing instead of hype.",
+      tools: "Use notes, issues, timelines, and current repo state as first-class inputs.",
+    },
   },
-};
+  builder: {
+    name: "Engineering Copilot",
+    category: "Delivery",
+    summary: "Targets implementation details, codebase constraints, and shipping discipline.",
+    description:
+      "Keeps specs grounded in the repo, narrows changesets, and leaves behind code that is explainable and maintainable.",
+    roleTitle: "Repo-grounded implementation copilot",
+    skills: ["Spec to code", "Regression hunts", "Release hygiene"],
+    seedFiles: {
+      identity: "Frame the helper as a pragmatic engineer with a bias toward clean, minimal changes.",
+      soul: "Stay explicit about risks, tests, and constraints before changing behavior.",
+      tools: "Treat the repo, tests, and runtime output as the source of truth.",
+    },
+  },
+} as const;
 
-type ToneOption = "Approachable" | "Professional" | "Minimalist" | "Energetic";
+type IdentityPresetKey = keyof typeof IDENTITY_PRESETS;
 
 export function CustomizationSection() {
-  const [selectedPreset, setSelectedPreset] = useState<keyof typeof AGENT_PRESETS>("analyst");
-  const [tone, setTone] = useState<ToneOption>("Professional");
-  const [avatarColor, setAvatarColor] = useState("bg-emerald-500");
-  const [agentName, setAgentName] = useState("Cipher");
-  const [knowledgeFocus, setKnowledgeFocus] = useState<string[]>([
-    "Financial Modeling",
-    "Market Intelligence",
-    "Risk Analysis",
-  ]);
+  const [selectedPreset, setSelectedPreset] = useState<IdentityPresetKey>("operator");
+  const [helperName, setHelperName] = useState("Eliza");
 
-  const handlePresetChange = (preset: keyof typeof AGENT_PRESETS) => {
-    setSelectedPreset(preset);
-    const presetData = AGENT_PRESETS[preset];
-    setTone(presetData.tone as ToneOption);
-    setAvatarColor(presetData.color);
-    setAgentName(presetData.defaultAgentName);
-    setKnowledgeFocus(presetData.knowledgeFocus);
-  };
-
-  const currentPreset = AGENT_PRESETS[selectedPreset];
-  const AgentIcon = currentPreset.icon;
+  const currentPreset = useMemo(() => IDENTITY_PRESETS[selectedPreset], [selectedPreset]);
 
   return (
     <section id="customization" className="px-6 py-24">
@@ -90,144 +75,142 @@ export function CustomizationSection() {
           viewport={{ once: true }}
           transition={{ duration: 0.6 }}
         >
-          <h2 className="text-4xl md:text-5xl font-bold mb-6">Designed by you. For you.</h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Customizing Atoll is as simple as describing a friend. Tailor the tone, appearance, and knowledge base instantly.
+          <h2 className="text-4xl md:text-5xl font-bold mb-6">Shape the helper around your workflow.</h2>
+          <p className="text-xl text-muted-foreground max-w-3xl mx-auto">
+            Atoll&apos;s setup is closer to choosing a teammate than filling out a marketing wizard. Pick an identity, inspect what it seeds, and keep the control plane grounded in the way you work.
           </p>
         </motion.div>
 
         <motion.div
-          className="grid grid-cols-1 lg:grid-cols-12 rounded-[2rem] lg:rounded-[3rem] overflow-hidden border border-border shadow-2xl"
+          className="grid grid-cols-1 overflow-hidden rounded-[2rem] border border-border/70 bg-card/70 shadow-2xl backdrop-blur lg:grid-cols-12 lg:rounded-[3rem]"
           initial={{ opacity: 0, y: 40 }}
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true }}
           transition={{ duration: 0.7, delay: 0.2 }}
         >
-          {/* Left Panel: Controls */}
-          <div className="lg:col-span-4 bg-secondary p-6 sm:p-8 lg:p-12 border-b lg:border-b-0 lg:border-r border-border">
-            <h4 className="text-xs font-bold uppercase tracking-widest text-muted-foreground mb-6 lg:mb-10">Identity Settings</h4>
-            <div className="space-y-6 lg:space-y-10">
-              <div className="space-y-3 lg:space-y-4">
-                <Label htmlFor="agent-preset" className="text-sm font-bold uppercase tracking-wider">Agent Preset</Label>
-                <Select value={selectedPreset} onValueChange={(value) => handlePresetChange(value as keyof typeof AGENT_PRESETS)}>
-                  <SelectTrigger id="agent-preset" className="w-full">
-                    <SelectValue placeholder="Select an agent" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sales">{AGENT_PRESETS.sales.name}</SelectItem>
-                    <SelectItem value="developer">{AGENT_PRESETS.developer.name}</SelectItem>
-                    <SelectItem value="social">{AGENT_PRESETS.social.name}</SelectItem>
-                    <SelectItem value="analyst">{AGENT_PRESETS.analyst.name}</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+          <div className="border-b border-border/70 bg-background/90 p-6 sm:p-8 lg:col-span-4 lg:border-b-0 lg:border-r lg:p-10">
+            <p className="mb-6 text-xs font-bold uppercase tracking-[0.28em] text-muted-foreground">Identity Settings</p>
 
-              <div className="space-y-3 lg:space-y-4">
-                <Label htmlFor="agent-name" className="text-sm font-bold uppercase tracking-wider">Agent Name</Label>
+            <div className="mb-8 flex items-center gap-4 rounded-[1.75rem] border border-border/70 bg-background/80 p-4">
+              <img
+                src={elizaHelper}
+                alt=""
+                aria-label="Helper avatar preview"
+                className="h-16 w-16 rounded-2xl border border-border/70 bg-sky-100 object-cover"
+              />
+              <div className="min-w-0">
+                <p className="text-sm font-semibold text-foreground">{helperName}</p>
+                <p className="mt-1 text-sm text-muted-foreground">{currentPreset.roleTitle}</p>
+              </div>
+            </div>
+
+            <div className="space-y-6">
+              <div className="space-y-3">
+                <Label htmlFor="helper-name" className="text-sm font-medium">Helper name</Label>
                 <Input
-                  id="agent-name"
-                  value={agentName}
-                  onChange={(e) => setAgentName(e.target.value)}
-                  placeholder="Enter agent name"
-                  className="w-full"
+                  id="helper-name"
+                  value={helperName}
+                  onChange={(event) => setHelperName(event.target.value)}
+                  placeholder="Alex, Maya, Jordan..."
+                  className="h-12 rounded-2xl border-border/70 bg-background/70"
                 />
               </div>
 
-              <div className="space-y-3 lg:space-y-4">
-                <label className="block text-sm font-bold uppercase tracking-wider">Tone of Voice</label>
-                <div className="grid grid-cols-2 gap-2 sm:gap-3">
-                  {(["Approachable", "Professional", "Minimalist", "Energetic"] as ToneOption[]).map((t) => (
-                    <button
-                      key={t}
-                      onClick={() => setTone(t)}
-                      className={`px-3 py-2.5 lg:px-4 lg:py-3 rounded-xl lg:rounded-2xl text-[12px] lg:text-[13px] font-bold transition-all ${
-                        tone === t
-                          ? "bg-primary text-primary-foreground shadow-lg"
-                          : "bg-card border border-border text-muted-foreground hover:border-primary hover:text-foreground"
-                      }`}
-                    >
-                      {t}
-                    </button>
-                  ))}
-                </div>
+              <div className="space-y-3">
+                <Label htmlFor="helper-identity" className="text-sm font-medium">Identity</Label>
+                <Select value={selectedPreset} onValueChange={(value) => setSelectedPreset(value as IdentityPresetKey)}>
+                  <SelectTrigger id="helper-identity" aria-label="Identity" className="h-12 rounded-2xl border-border/70 bg-background/70">
+                    <SelectValue placeholder="Select an identity" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(IDENTITY_PRESETS).map(([key, preset]) => (
+                      <SelectItem key={key} value={key}>
+                        {preset.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-sm text-muted-foreground">
+                  Choose the helper&apos;s role here. The landing page mirrors Atoll&apos;s real setup flow instead of a generic personality picker.
+                </p>
               </div>
 
-              <div className="space-y-3 lg:space-y-4">
-                <label className="block text-sm font-bold uppercase tracking-wider">Avatar Style</label>
-                <div className="flex gap-3 lg:gap-4">
-                  {[
-                    { color: "bg-primary", label: "Primary" },
-                    { color: "bg-indigo-500", label: "Indigo" },
-                    { color: "bg-rose-500", label: "Rose" },
-                    { color: "bg-emerald-500", label: "Emerald" },
-                  ].map((avatar) => (
-                    <button
-                      key={avatar.color}
-                      onClick={() => setAvatarColor(avatar.color)}
-                      className={`w-10 h-10 lg:w-12 lg:h-12 ${avatar.color} rounded-full border hover:scale-110 transition-transform cursor-pointer ${
-                        avatarColor === avatar.color
-                          ? "border-4 border-card ring-2 ring-primary shadow-lg"
-                          : "border-border opacity-50"
-                      }`}
-                      aria-label={`Select ${avatar.label} color`}
-                    />
-                  ))}
-                </div>
+              <div className="rounded-[1.75rem] border border-primary/15 bg-primary/5 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-primary/80">Identity preview</p>
+                <p className="mt-3 text-lg font-semibold text-foreground">{currentPreset.name}</p>
+                <p className="mt-1 text-xs uppercase tracking-[0.18em] text-muted-foreground">{currentPreset.category}</p>
+                <p className="mt-3 text-sm text-muted-foreground">{currentPreset.summary}</p>
+                <p className="mt-3 text-sm text-muted-foreground">{currentPreset.description}</p>
               </div>
 
-              <div className="space-y-3 lg:space-y-4">
-                <Label className="text-sm font-bold uppercase tracking-wider">Knowledge Focus</Label>
-                <div className="space-y-2">
-                  {knowledgeFocus.map((focus, index) => (
-                    <div
-                      key={focus}
-                      className="p-3 lg:p-4 bg-card rounded-xl lg:rounded-2xl border border-primary/50 flex items-center justify-between"
-                    >
-                      <span className="text-xs lg:text-sm font-medium">{focus}</span>
-                      <div className="w-2 h-2 rounded-full bg-primary" />
-                    </div>
-                  ))}
-                </div>
+              <div className="rounded-[1.75rem] border border-border/70 bg-background/75 p-4">
+                <p className="text-xs uppercase tracking-[0.18em] text-muted-foreground">What this changes</p>
+                <p className="mt-3 text-sm text-muted-foreground">
+                  Atoll uses this identity to seed the helper&apos;s initial <code>IDENTITY.md</code>, <code>SOUL.md</code>, and <code>TOOLS.md</code>.
+                </p>
               </div>
             </div>
           </div>
 
-          {/* Right Panel: Chat Demo */}
-          <div className="lg:col-span-8 bg-card p-6 sm:p-10 lg:p-20 relative overflow-hidden flex items-center justify-center">
-            <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-primary/5 rounded-full blur-[100px]" />
-            <div className="w-full max-w-lg space-y-6 lg:space-y-8 relative z-10">
-              <div className="flex items-center gap-4 lg:gap-5 mb-6 lg:mb-10">
-                <div className="relative">
-                  <div className={`w-14 h-14 lg:w-20 lg:h-20 ${avatarColor} rounded-xl lg:rounded-[1.5rem] flex items-center justify-center shadow-xl transition-all duration-300`}>
-                    <AgentIcon className="h-6 w-6 lg:h-8 lg:w-8 text-white" />
+          <div className="relative bg-gradient-to-br from-background via-secondary/35 to-background p-6 sm:p-8 lg:col-span-8 lg:p-12">
+            <div className="absolute right-0 top-0 h-56 w-56 rounded-full bg-primary/10 blur-3xl" />
+
+            <div className="relative z-10 grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+              <div className="rounded-[2rem] border border-border/70 bg-background/85 p-6 shadow-lg">
+                <div className="flex flex-wrap items-start justify-between gap-4 border-b border-border/70 pb-5">
+                  <div className="flex items-center gap-4">
+                    <img
+                      src={elizaHelper}
+                      alt={`${helperName} avatar`}
+                      className="h-20 w-20 rounded-[1.5rem] border border-border/70 bg-sky-100 object-cover"
+                    />
+                    <div>
+                      <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Helper preview</p>
+                      <h3 className="mt-2 text-2xl font-semibold text-foreground">{helperName}</h3>
+                      <p className="mt-1 text-sm text-muted-foreground">{currentPreset.roleTitle}</p>
+                    </div>
                   </div>
-                  <div className="absolute -bottom-1.5 -right-1.5 lg:-bottom-2 lg:-right-2 w-5 h-5 lg:w-6 lg:h-6 bg-green-500 rounded-full border-[3px] lg:border-4 border-card" />
+                  <div className="rounded-full border border-primary/20 bg-primary/10 px-4 py-2 text-xs font-semibold uppercase tracking-[0.18em] text-primary">
+                    Ready to seed
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-2xl lg:text-3xl font-bold mb-1">{agentName}</h3>
-                  <p className="text-primary font-bold text-[10px] lg:text-xs uppercase tracking-widest">Active • {tone}</p>
+
+                <div className="mt-6 grid gap-4 md:grid-cols-3">
+                  <PreviewFileCard
+                    title="IDENTITY.md"
+                    body={currentPreset.seedFiles.identity}
+                  />
+                  <PreviewFileCard
+                    title="SOUL.md"
+                    body={currentPreset.seedFiles.soul}
+                  />
+                  <PreviewFileCard
+                    title="TOOLS.md"
+                    body={currentPreset.seedFiles.tools}
+                  />
                 </div>
               </div>
 
-              <div className="space-y-4 lg:space-y-6">
-                <div className="p-4 lg:p-6 bg-secondary rounded-2xl lg:rounded-3xl rounded-tl-none mr-8 lg:mr-16 border border-border shadow-md">
-                  <p className="text-[13px] lg:text-[15px] leading-relaxed italic text-foreground/80">
-                    "{currentPreset.greeting}"
-                  </p>
-                </div>
-                <div 
-                  className={`p-4 lg:p-6 ${avatarColor} text-white rounded-2xl lg:rounded-3xl rounded-tr-none ml-8 lg:ml-16 shadow-lg font-medium transition-all duration-300`}
-                >
-                  <p className="text-[13px] lg:text-[15px] leading-relaxed">
-                    "{currentPreset.response}"
-                  </p>
-                </div>
-                <div className="p-4 lg:p-6 bg-secondary rounded-2xl lg:rounded-3xl rounded-tl-none mr-8 lg:mr-16 border border-border shadow-md w-max">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 ${avatarColor} rounded-full animate-bounce`} />
-                    <div className={`w-2 h-2 ${avatarColor} rounded-full animate-bounce`} style={{ animationDelay: "0.2s" }} />
-                    <div className={`w-2 h-2 ${avatarColor} rounded-full animate-bounce`} style={{ animationDelay: "0.4s" }} />
+              <div className="space-y-6">
+                <div className="rounded-[2rem] border border-border/70 bg-background/85 p-6 shadow-lg">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Identity skills</p>
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {currentPreset.skills.map((skill) => (
+                      <span
+                        key={skill}
+                        className="rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5 text-sm text-primary"
+                      >
+                        {skill}
+                      </span>
+                    ))}
                   </div>
+                </div>
+
+                <div className="rounded-[2rem] border border-border/70 bg-background/85 p-6 shadow-lg">
+                  <p className="text-xs uppercase tracking-[0.22em] text-muted-foreground">Setup note</p>
+                  <p className="mt-4 text-sm leading-7 text-muted-foreground">
+                    The best helpers feel specific. Start with a clear identity, keep the role title honest, and let Atoll carry those instructions into the runtime instead of hiding them behind marketing copy.
+                  </p>
                 </div>
               </div>
             </div>
@@ -235,5 +218,14 @@ export function CustomizationSection() {
         </motion.div>
       </div>
     </section>
+  );
+}
+
+function PreviewFileCard({ title, body }: { title: string; body: string }) {
+  return (
+    <div className="rounded-[1.5rem] border border-border/70 bg-secondary/50 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted-foreground">{title}</p>
+      <p className="mt-3 text-sm leading-6 text-muted-foreground">{body}</p>
+    </div>
   );
 }
