@@ -62,6 +62,8 @@ import {
 
 loadEnvFileIfPresent();
 
+const DEFAULT_RUNTIME_HTTP_TIMEOUT_MS = 60 * 60 * 1000;
+
 type PublicRuntimeInstance = Omit<
   RuntimeInstance,
   | "bearerToken"
@@ -1386,7 +1388,8 @@ function resolveConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     true
   );
   const runtimeHttpTimeoutMs =
-    overrides.runtimeHttpTimeoutMs ?? parseNonNegativeInteger(process.env.RUNTIME_HTTP_TIMEOUT_MS, 15000);
+    overrides.runtimeHttpTimeoutMs ??
+    parseNonNegativeInteger(process.env.RUNTIME_HTTP_TIMEOUT_MS, DEFAULT_RUNTIME_HTTP_TIMEOUT_MS);
   const runtimeProvisioningStaleMs =
     overrides.runtimeProvisioningStaleMs ??
     parsePositiveInteger(process.env.RUNTIME_PROVISIONING_STALE_MS, 30 * 60 * 1000);

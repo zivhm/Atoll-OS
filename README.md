@@ -123,6 +123,7 @@ Most day-to-day configuration comes from the repo-root `.env`.
 | `HOST` | No | API bind host |
 | `RUNTIME_PROVIDER` | No | Default LLM provider for newly provisioned helpers |
 | `RUNTIME_MODEL` | No | Default LLM model for newly provisioned helpers |
+| `RUNTIME_HTTP_TIMEOUT_MS` | No | Runtime HTTP request timeout in milliseconds (default `3600000`, i.e. 1 hour) |
 | `RUNTIME_OPENCLAW_IMAGE` | No | OpenClaw runtime image override |
 | `RUNTIME_STARTUP_VALIDATION` | No | Runtime prerequisite validation mode: `strict`, `warn`, or `off` |
 | `RUNTIME_ALLOW_PUBLIC_BIND` | No | Whether helper gateways bind to host loopback by default |
