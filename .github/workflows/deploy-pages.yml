@@ -37,6 +37,7 @@ jobs:
         run: |
           npm ci
           npm i --no-save @rollup/rollup-linux-x64-gnu
+          npm i --no-save @swc/core-linux-x64-gnu
 
       - name: Build web for Pages base path
         env:
