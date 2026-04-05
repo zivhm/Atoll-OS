@@ -10,11 +10,25 @@
 
 **Meet your next favorite employee.**
 
-Atoll is a self-hosted control plane for creating, provisioning, and operating AI helpers across workspaces, runtimes, and channels.
+Atoll removes the busywork of creating and managing helpers, so you can focus on your work.
 
 [Landing page](https://zivhm.github.io/Atoll-OS/) · [Quick start](#quick-start) · [Docker Compose](#docker-compose) · [Core concepts](#core-concepts) · [Configuration](#configuration)
 
-![Atoll control plane](web/public/images/landing.png)
+| Atoll control plane |
+| :---: |
+| ![Atoll control plane](web/public/images/landing.png) |
+
+## App Preview
+
+Replace these placeholders with product screenshots when you are ready. A simple pattern is to drop images into `docs/images/` and update the paths below.
+
+| Helper setup | Runtime operations |
+| :---: | :---: |
+| `Placeholder: helper creation flow screenshot` | `Placeholder: runtime health, logs, and repair view screenshot` |
+
+| Identity catalog | Channel configuration |
+| :---: | :---: |
+| `Placeholder: identities screen screenshot` | `Placeholder: Telegram / Discord configuration screenshot` |
 
 ## Why Atoll
 
