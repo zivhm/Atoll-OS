@@ -42,9 +42,7 @@ Most agent projects focus on the helper itself. **Atoll focuses on the operating
 | **Identity catalog** | Manage reusable business identities and helper presets from the UI |
 | **Runtime operations** | Inspect health, logs, events, repair actions, and reconcile flows |
 | **Channel wiring** | Expose Telegram and Discord settings without spreading config across tools |
-| **Single-host friendly** | Run locally during development or in Docker Compose for a self-hosted deployment |
-
-> **Optimized for today:** local and single-host operation, Docker-managed runtimes, OpenClaw-backed execution — with a long-term direction toward harness-agnostic runtime support.
+| **Single-host** | Run locally during development or in Docker Compose for a self-hosted deployment |
 
 ---
 
@@ -54,8 +52,6 @@ Most agent projects focus on the helper itself. **Atoll focuses on the operating
 
 - Node.js `20+` and `npm`
 - Docker Desktop or another reachable Docker engine
-
-> The UI can boot without Docker, but provisioning and runtime lifecycle actions require a reachable Docker engine.
 
 ### Steps
 
@@ -86,12 +82,7 @@ npm run dev
 
 **5. Open in your browser**
 
-| Service | URL |
-| --- | --- |
-| App UI | http://127.0.0.1:8080 |
-| API | http://127.0.0.1:8450 |
-
-> `npm run dev` pins the API to `PORT` or `8450` by default and configures Vite to proxy `/api` requests to that origin.
+Open [http://127.0.0.1:8450](http://127.0.0.1:8450)
 
 ---
 
@@ -105,8 +96,6 @@ docker compose up --build
 ```
 
 Open [http://127.0.0.1:8450](http://127.0.0.1:8450)
-
-> In Docker mode, the built frontend is served by the API container on the same port. Compose stores runtime data in the `atoll_data` volume and mounts the Docker socket so Atoll can manage helper runtimes.
 
 ---
 
@@ -136,25 +125,25 @@ Reusable identity presets live under [`src/business-identities`](src/business-id
 ```
 ┌─────────────────────────────────────────────┐
 │                  Web UI                     │
-│         React 18 + Vite + Tailwind          │
+│                                             │
 └────────────────────┬────────────────────────┘
                      │ /api
 ┌────────────────────▼────────────────────────┐
 │                 API Layer                   │
-│           Fastify + TypeScript              │
+│                                             │
 └──────┬──────────────────────────────────────┘
        │
 ┌──────▼──────┐     ┌──────────────────────┐
-│  Persistence │     │   Runtime Host       │
-│  JSON + enc. │     │   Docker engine      │
-└─────────────┘     └──────────────────────┘
+│ Persistence │     │   Runtime Host       │
+└─────────────┘     │   Docker engine      │
+                    └──────────────────────┘
 ```
 
 ---
 
 ## ⚙️ Configuration
 
-All day-to-day configuration lives in the repo-root `.env`.
+All important configuration lives in the repo-root `.env`.
 
 | Variable | Required | Purpose |
 | --- | :---: | --- |
@@ -220,13 +209,11 @@ atoll-state.json          Local persisted state file
 | Default hosted model | `anthropic/claude-sonnet-4.6` |
 | Long-term direction | Harness-agnostic runtime support |
 
-> If the frontend build is missing in production mode, non-API browser requests return `503` — run `npm run build` or use `npm run dev`.
-
 ---
 
 ## 🌐 Landing Page
 
-The public marketing site is hosted on GitHub Pages, separate from the self-hosted control-plane app.
+The public site is hosted on GitHub Pages, separate from the self-hosted control-plane app.
 
 - **Site:** [https://zivhm.github.io/Atoll-OS/](https://zivhm.github.io/Atoll-OS/)
 - **Source:** [`landing/`](landing/)
