@@ -2,8 +2,14 @@
 
 <div align="center">
 
-[![Live site](https://img.shields.io/badge/site-live-22A4B4?style=for-the-badge)](https://zivhm.github.io/Atoll-OS/)
-[![Deploy](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml/badge.svg)](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml)
+<img src="web/src/assets/logo/atoll-lockup.svg" alt="Atoll" width="150" />
+
+### Turn blank agents into ready-to-work helpers.
+
+[Landing page](https://zivhm.github.io/Atoll-OS/) · [Quick start](#-quick-start) · [Docker Compose](#-docker-compose) · [Core concepts](#-core-concepts) · [Configuration](#%EF%B8%8F-configuration)
+
+[![Live site](https://img.shields.io/badge/site-live-22A4B4?style=flat-square)](https://zivhm.github.io/Atoll-OS/)
+[![Deploy](https://img.shields.io/github/actions/workflow/status/zivhm/Atoll-OS/deploy-pages.yml?style=flat-square&label=deploy)](https://github.com/zivhm/Atoll-OS/actions/workflows/deploy-pages.yml)
 [![License](https://img.shields.io/github/license/zivhm/Atoll-OS?style=flat-square)](LICENSE)
 
 ![Self-hosted](https://img.shields.io/badge/self--hosted-control%20plane-1C1F2A?style=flat-square)
@@ -11,24 +17,29 @@
 ![Web](https://img.shields.io/badge/web-React%20%2B%20Vite-61DAFB?style=flat-square)
 ![API](https://img.shields.io/badge/api-Fastify%20%2B%20TypeScript-000000?style=flat-square)
 
-# Atoll removes the busywork of creating and managing AI helpers, so you can focus on your work.
-
-[Landing page](https://zivhm.github.io/Atoll-OS/) · [Quick start](#-quick-start) · [Docker Compose](#-docker-compose) · [Core concepts](#-core-concepts) · [Configuration](#%EF%B8%8F-configuration)
-
 </div>
 
 ---
 
 ## 🏝️ Why Atoll
 
-Most agent projects focus on the helper itself. **Atoll focuses on the operating layer around it.**
+Most agent tools hand you a blank slate and expect you to figure out the rest.
+For a freelancer or non-tech owner, that's a dead end. Most just don't have the time or the context to build from zero.
+
+Atoll ships helpers that already know their job.
+Pick a role (accountant, support agent, social media manager, or define your own) and the helper comes pre-loaded with the right identity, goals, and behavior.
+
+The underlying runtime is unchanged. We just give it a purpose before you ever open it.
+
+**Atoll focuses on the operating layer around the agent.**
 
 - 🤖 Create helpers with reusable identities, role definitions, and skill/tool context
-- 🐳 Provision Docker-backed runtimes without hand-wiring every instance
+- 📁 Share files directly with helpers
+- 🐳 Provision containered runtimes without hand-wiring every instance
 - 🔗 Place helpers in shared or dedicated workspaces
 - 💬 Configure Telegram and Discord channels from the same UI
-- 🛠 Operate helpers from the browser — chat, logs, health, repair, reconcile, event history
-- 🔒 Keep local state simple while protecting sensitive credentials behind an app-level secrets key
+- 🛠 Operate helpers from the browser: chat, logs, health, repair, reconcile, event history
+- 🛡 Helpers runs in their own isolated Docker containers with dedicated volumes and networks
 
 ---
 
@@ -63,7 +74,7 @@ cp .env.example .env
 
 ```env
 ATOLL_SECRETS_KEY=<long-random-string>         # required
-ATOLL_LLM_PROVIDER_API_KEY=<your-api-key>      # optional default
+ATOLL_LLM_PROVIDER_API_KEY=<your-api-key>      # optional to set default
 ```
 
 **3. Install dependencies**
@@ -146,17 +157,17 @@ All important configuration lives in the repo-root `.env`.
 | Variable | Required | Purpose |
 | --- | :---: | --- |
 | `ATOLL_SECRETS_KEY` | ✅ | Encryption key for stored secrets and sensitive runtime config |
-| `ATOLL_LLM_PROVIDER_API_KEY` | — | Default provider API key when a helper has none |
-| `PORT` | — | API port (default `8450`) |
-| `HOST` | — | API bind host |
-| `RUNTIME_PROVIDER` | — | Default LLM provider for new helpers |
-| `RUNTIME_MODEL` | — | Default LLM model for new helpers |
-| `RUNTIME_HTTP_TIMEOUT_MS` | — | Runtime HTTP timeout in ms (default `3600000`) |
-| `RUNTIME_OPENCLAW_IMAGE` | — | OpenClaw runtime image override |
-| `RUNTIME_STARTUP_VALIDATION` | — | Prerequisite validation: `strict`, `warn`, or `off` |
-| `RUNTIME_ALLOW_PUBLIC_BIND` | — | Whether helper gateways bind to host loopback by default |
-| `RUNTIME_REQUIRE_PAIRING` | — | Whether pairing is required for supported runtimes |
-| `ATOLL_CORS_ALLOWED_ORIGINS` | — | Needed when the web app is on a different origin than the API |
+| `ATOLL_LLM_PROVIDER_API_KEY` | | Default provider API key when a helper has none |
+| `PORT` | | API port (default `8450`) |
+| `HOST` | | API bind host |
+| `RUNTIME_PROVIDER` | | Default LLM provider for new helpers |
+| `RUNTIME_MODEL` | | Default LLM model for new helpers |
+| `RUNTIME_HTTP_TIMEOUT_MS` | | Runtime HTTP timeout in ms (default `3600000`) |
+| `RUNTIME_OPENCLAW_IMAGE` | | OpenClaw runtime image override |
+| `RUNTIME_STARTUP_VALIDATION` | | Prerequisite validation: `strict`, `warn`, or `off` |
+| `RUNTIME_ALLOW_PUBLIC_BIND` | | Whether helper gateways bind to host loopback by default |
+| `RUNTIME_REQUIRE_PAIRING` | | Whether pairing is required for supported runtimes |
+| `ATOLL_CORS_ALLOWED_ORIGINS` | | Needed when the web app is on a different origin than the API |
 
 > The Settings screen writes managed runtime defaults back to `.env`. Changes require an API restart to fully apply.
 
@@ -205,7 +216,7 @@ atoll-state.json          Local persisted state file
 | Default runtime type | `openclaw` |
 | Default hosted provider | `openrouter` |
 | Default hosted model | `anthropic/claude-sonnet-4.6` |
-| Long-term direction | Harness-agnostic runtime support |
+| Long-term direction | Harness/Provider-agnostic runtime support |
 
 ---
 
