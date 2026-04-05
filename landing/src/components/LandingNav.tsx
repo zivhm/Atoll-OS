@@ -1,11 +1,11 @@
+import { ATOLL_GITHUB_URL } from "@/constants";
+
 import { AtollLogo } from "@/components/AtollLogo";
 import { ThemeToggle } from "@/components/ThemeToggle";
-import { Button } from "@/components/ui/button";
-import { ATOLL_GITHUB_URL } from "@/components/landing/constants";
 
 export function LandingNav() {
   return (
-    <nav className="fixed top-0 z-50 w-full h-16 border-b border-border bg-background/80 backdrop-blur-md">
+    <nav className="fixed top-0 z-50 h-16 w-full border-b border-border/80 bg-background/86 backdrop-blur-md">
       <div className="mx-auto flex h-full max-w-7xl items-center justify-between px-6">
         <div className="flex items-center gap-10">
           <a href="#top" className="flex items-center gap-3">
@@ -20,10 +20,13 @@ export function LandingNav() {
         </div>
         <div className="flex items-center gap-4">
           <ThemeToggle />
-          <a href={ATOLL_GITHUB_URL} target="_blank" rel="noreferrer">
-            <Button className="rounded-full px-5 text-sm font-bold shadow-sm">
-              GitHub
-            </Button>
+          <a
+            href={ATOLL_GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-full bg-primary px-5 py-2.5 text-sm font-bold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            GitHub
           </a>
         </div>
       </div>
