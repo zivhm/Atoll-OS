@@ -122,7 +122,6 @@ Most day-to-day configuration comes from the repo-root `.env`.
 | `RUNTIME_PROVIDER` | No | Default LLM provider for newly provisioned helpers |
 | `RUNTIME_MODEL` | No | Default LLM model for newly provisioned helpers |
 | `RUNTIME_OPENCLAW_IMAGE` | No | OpenClaw runtime image override |
-| `RUNTIME_ZEROCLAW_IMAGE` | No | Reserved image override for future harness support |
 | `RUNTIME_STARTUP_VALIDATION` | No | Runtime prerequisite validation mode: `strict`, `warn`, or `off` |
 | `RUNTIME_ALLOW_PUBLIC_BIND` | No | Whether helper gateways bind to host loopback by default |
 | `RUNTIME_REQUIRE_PAIRING` | No | Whether pairing is required for runtimes that support it |
