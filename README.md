@@ -1,25 +1,26 @@
 # Atoll OS
 
-Atoll is a self-hosted control plane for managing AI helpers backed by Docker-managed runtimes. It combines a Fastify API, a React web console, a reusable identity catalog, and runtime orchestration around an OpenClaw-based helper runtime.
+Atoll is a self-hosted control plane for managing AI agents orchestration around OpenClaw-based helper runtime.
 
-The current implementation is optimized for local or single-host operation: create helpers, assign them to a default or dedicated workspace, provision a runtime, configure channels, and operate the helper from the browser UI.
+The current implementation is optimized for local operation:
+create helpers, assign them to a default or dedicated workspace, provision a runtime, configure channels, and operate the helper from the browser UI or ingergated messaging services.
 
 ## What It Does
 
 - Creates and manages helpers inside shared or dedicated workspaces.
-- Provisions Docker-backed OpenClaw helper runtimes.
+- Provisions Docker-backed agent runtimes.
+- Exposes channel settings for Telegram and Discord.
+- Includes an admin-style identity catalog for managing helper presets from the UI.
+- Supports runtime chat, health checks, logs, repair, reconcile, and event history.
 - Persists app state locally in `atoll-state.json` or a configured data path.
 - Stores sensitive runtime credentials behind an app-level secrets key.
-- Supports runtime chat, health checks, logs, repair, reconcile, and event history.
-- Exposes channel settings for Telegram, Slack, and Discord.
-- Includes an admin-style identity catalog for managing helper presets from the UI.
 - Serves the built frontend from the API process in production mode.
 
 ## Stack
 
 - API: Fastify + TypeScript
 - Web: React 18, Vite, Tailwind, Radix UI, React Query
-- Runtime host: Docker / Docker Desktop
+- Runtime host: Docker
 - Persistence: local JSON state file plus encrypted secrets
 
 ## Core Concepts
@@ -37,9 +38,10 @@ A helper is the user-facing agent record: name, avatar, role title, preset, skil
 
 ### Runtimes
 
-A runtime is the managed execution environment attached to a helper. The current public support target is `openclaw`.
+A runtime is the managed execution environment attached to a helper.
 
-Atoll provisions the current helper runtime through Docker, tracks its status, and exposes lifecycle actions through the API and UI. The long-term direction is harness-agnostic support rather than coupling the control plane to a single runtime forever.
+Atoll provisions the current helper runtime through Docker, tracks its status, and exposes lifecycle actions through the API and UI.
+The long-term direction is harness-agnostic support rather than coupling the control plane to a single runtime.
 
 ### Identities
 
@@ -129,33 +131,6 @@ Most day-to-day configuration comes from the repo-root `.env`.
 
 The Settings screen writes managed runtime defaults back into the repo-root `.env`. Those changes require an API restart to fully apply.
 
-## Authentication Model
-
-This repo currently runs in local auth mode.
-
-- The API injects a local auth context for each request.
-- The default identity comes from `ATOLL_LOCAL_AUTH_SUB` and `ATOLL_LOCAL_AUTH_ORG_ID`.
-- Dev-only header overrides are available only when `ATOLL_LOCAL_AUTH_ALLOW_HEADER_OVERRIDES=true`.
-
-There is no external sign-in flow in the current implementation.
-
-## Main Scripts
-
-```powershell
-npm run dev
-npm run dev:api
-npm run dev:web
-npm run build
-npm run start
-npm run typecheck
-npm run test
-```
-
-Additional useful commands:
-
-- `npm run lint`
-- `npm run web:preview`
-
 ## Project Structure
 
 ```text
@@ -206,21 +181,6 @@ The frontend currently uses these APIs for:
 - Frontend production assets are served from `web/dist` when present
 
 If the frontend build is missing in production mode, non-API browser requests return a `503` with a message telling you to run `npm run build` or use `npm run dev`.
-
-## Validation
-
-Before shipping changes, use:
-
-```powershell
-npm run typecheck
-npm run test
-```
-
-For a production artifact check, also run:
-
-```powershell
-npm run build
-```
 
 ## License
 
