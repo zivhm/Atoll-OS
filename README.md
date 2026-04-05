@@ -61,6 +61,10 @@ On Windows, `npm run dev` attempts to start Docker Desktop automatically if Dock
 Copy-Item .env.example .env
 ```
 
+```bash
+cp .env.example .env
+```
+
 1. Edit `.env` and set at least:
 
 - `ATOLL_SECRETS_KEY`: required, long random string used to protect stored secrets.
@@ -72,9 +76,17 @@ Copy-Item .env.example .env
 npm install
 ```
 
+```bash
+npm install
+```
+
 1. Start the API and app together:
 
 ```powershell
+npm run dev
+```
+
+```bash
 npm run dev
 ```
 
@@ -95,11 +107,19 @@ For a containerized single-host deployment:
 Copy-Item .env.example .env
 ```
 
+```bash
+cp .env.example .env
+```
+
 1. Set `ATOLL_SECRETS_KEY` in `.env`.
 
 1. Build and start:
 
 ```powershell
+docker compose up --build
+```
+
+```bash
 docker compose up --build
 ```
 
