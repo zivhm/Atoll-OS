@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Loader2, RefreshCw, RotateCcw, Settings2 } from "lucide-react";
 import { toast } from "sonner";
 
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { PageContainer } from "@/components/layout/PageContainer";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageMotion } from "@/components/layout/PageMotion";
-import { Section } from "@/components/layout/Section";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/hooks/use-auth";
+import { useTheme } from "@/hooks/use-theme";
 import {
   getErrorMessage,
   getSettingsConfig,
@@ -39,6 +38,7 @@ const AI_DEFAULT_KEYS = [
 export default function AccountSettings() {
   const queryClient = useQueryClient();
   const { refresh, signOut } = useAuth();
+  const { theme, setTheme } = useTheme();
   const [draftValues, setDraftValues] = useState<ConfigValues>({});
   const settingsConfigQuery = useQuery({
     queryKey: ["settings-config"],
@@ -75,140 +75,172 @@ export default function AccountSettings() {
   }, [draftValues, settingsConfigQuery.data]);
 
   return (
-    <PageContainer width="wide" className="space-y-6">
+    <PageContainer width="narrow" className="space-y-6 pb-10">
       <PageMotion>
         <PageHeader
           eyebrow="Preferences"
           title="Settings"
-          description="Manage your local theme, session actions, and default AI configuration."
+          description="Manage local preferences, AI defaults, and session history actions."
         />
       </PageMotion>
 
-      <div className="space-y-6">
-        <Section title="Preferences">
-          <div className="rounded-[28px] border border-border/80 bg-card px-6 py-6">
-            <div className="flex items-center justify-between gap-6">
-              <div>
-                <p className="text-[1.05rem] font-semibold text-foreground">Theme</p>
-                <p className="mt-2 text-sm text-muted-foreground">
-                  Toggle between light and dark mode.
-                </p>
-              </div>
-              <ThemeToggle />
-            </div>
+      <div className="space-y-4">
+        <SettingsCard
+          title="General"
+          description="Manage local display and workspace preferences."
+        >
+          <div className="space-y-2">
+            <Label htmlFor="theme-select" className="text-sm font-medium text-foreground">
+              Theme
+            </Label>
+            <Select
+              value={theme}
+              onValueChange={(value) => {
+                if (value === "light" || value === "dark") {
+                  setTheme(value);
+                }
+              }}
+            >
+              <SelectTrigger id="theme-select" aria-label="Theme mode">
+                <SelectValue placeholder="Select theme" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="light">Light</SelectItem>
+                <SelectItem value="dark">Dark</SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground">
+              Light mode is fully supported. Theme preference is saved locally.
+            </p>
           </div>
-        </Section>
+        </SettingsCard>
 
-        <Section title="AI defaults">
-          <div className="space-y-4 rounded-[28px] border border-border/80 bg-card p-5">
-            {settingsConfigQuery.data?.restartRequired ? (
-              <div className="rounded-[20px] border border-amber-500/20 bg-amber-500/8 p-4 text-sm">
-                <p className="font-medium text-foreground">Restart required</p>
-                <p className="mt-1 text-muted-foreground">
-                  {settingsConfigQuery.data.restartMessage ??
-                    "Saved values update the repo-root .env. Restart the API to fully apply them."}
-                </p>
-                <p className="mt-2 text-muted-foreground">
-                  {settingsConfigQuery.data.warning ??
-                    "Runtime config precedence is unchanged: external process env vars still win over .env at startup."}
-                </p>
-              </div>
-            ) : null}
-
-            {settingsConfigQuery.isLoading ? (
-              <div className="rounded-[20px] border border-border/70 bg-background/60 px-4 py-6 text-sm text-muted-foreground">
-                Loading AI defaults...
-              </div>
-            ) : settingsConfigQuery.error ? (
-              <div className="rounded-[20px] border border-destructive/30 bg-destructive/5 px-4 py-6 text-sm text-destructive">
-                {getErrorMessage(settingsConfigQuery.error, "Failed to load AI defaults")}
-              </div>
-            ) : (
-              <>
-                <div className="space-y-4">
-                  {aiDefaults.map((field) => (
-                    <SettingsFieldControl
-                      key={field.key}
-                      field={field}
-                      value={draftValues[field.key]}
-                      onChange={(value) =>
-                        setDraftValues((current) => ({
-                          ...current,
-                          [field.key]: value,
-                        }))
-                      }
-                    />
-                  ))}
-                </div>
-
-                <div className="flex flex-wrap gap-3">
-                  <Button
-                    className="gap-2 rounded-2xl"
-                    disabled={!configDirty || configMutation.isPending}
-                    onClick={() => void configMutation.mutateAsync()}
-                  >
-                    {configMutation.isPending ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Settings2 className="h-4 w-4" />
-                    )}
-                    Save AI defaults
-                  </Button>
-                  <Button
-                    variant="outline"
-                    className="rounded-2xl"
-                    disabled={!configDirty || configMutation.isPending}
-                    onClick={() =>
-                      settingsConfigQuery.data
-                        ? setDraftValues(extractEditableConfigValues(settingsConfigQuery.data))
-                        : undefined
-                    }
-                  >
-                    Reset changes
-                  </Button>
-                </div>
-              </>
-            )}
-          </div>
-        </Section>
-
-        <Section title="Session actions">
-          <div className="space-y-4 rounded-[28px] border border-border/80 bg-card px-6 py-6">
-            <div className="text-sm text-muted-foreground">
-              <p className="font-medium text-foreground">Account and session actions</p>
-              <p className="mt-2">
-                Refresh the local auth session if something looks stale, or reload the app after changes.
+        <SettingsCard
+          title="AI defaults"
+          description="Define default model credentials and prompt behavior for new sessions."
+        >
+          {settingsConfigQuery.data?.restartRequired ? (
+            <div className="rounded-[16px] border border-amber-500/20 bg-amber-500/8 p-4 text-sm">
+              <p className="font-medium text-foreground">Restart required</p>
+              <p className="mt-1 text-muted-foreground">
+                {settingsConfigQuery.data.restartMessage ??
+                  "Saved values update the repo-root .env. Restart the API to fully apply them."}
+              </p>
+              <p className="mt-2 text-muted-foreground">
+                {settingsConfigQuery.data.warning ??
+                  "Runtime config precedence is unchanged: external process env vars still win over .env at startup."}
               </p>
             </div>
-            <div className="flex flex-wrap gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2 rounded-2xl"
-                onClick={async () => {
-                  await refresh();
-                  toast.success("Session refreshed");
-                }}
-              >
-                <RefreshCw className="h-4 w-4" />
-                Refresh session
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                className="gap-2 rounded-2xl"
-                onClick={async () => {
-                  await signOut();
-                }}
-              >
-                <RotateCcw className="h-4 w-4" />
-                Reload app
-              </Button>
+          ) : null}
+
+          {settingsConfigQuery.isLoading ? (
+            <div className="rounded-[16px] border border-border/70 bg-background/60 px-4 py-6 text-sm text-muted-foreground">
+              Loading AI defaults...
             </div>
+          ) : settingsConfigQuery.error ? (
+            <div className="rounded-[16px] border border-destructive/30 bg-destructive/5 px-4 py-6 text-sm text-destructive">
+              {getErrorMessage(settingsConfigQuery.error, "Failed to load AI defaults")}
+            </div>
+          ) : (
+            <>
+              <div className="space-y-4">
+                {aiDefaults.map((field) => (
+                  <SettingsFieldControl
+                    key={field.key}
+                    field={field}
+                    value={draftValues[field.key]}
+                    onChange={(value) =>
+                      setDraftValues((current) => ({
+                        ...current,
+                        [field.key]: value,
+                      }))
+                    }
+                  />
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-3">
+                <Button
+                  className="gap-2 rounded-2xl"
+                  disabled={!configDirty || configMutation.isPending}
+                  onClick={() => void configMutation.mutateAsync()}
+                >
+                  {configMutation.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <Settings2 className="h-4 w-4" />
+                  )}
+                  Save changes
+                </Button>
+                <Button
+                  variant="ghost"
+                  className="rounded-2xl"
+                  disabled={!configDirty || configMutation.isPending}
+                  onClick={() =>
+                    settingsConfigQuery.data
+                      ? setDraftValues(extractEditableConfigValues(settingsConfigQuery.data))
+                      : undefined
+                  }
+                >
+                  Reset
+                </Button>
+              </div>
+            </>
+          )}
+        </SettingsCard>
+
+        <SettingsCard
+          title="History"
+          description="Refresh auth state or reload the app to clear stale local session state."
+        >
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 rounded-2xl"
+              onClick={async () => {
+                await refresh();
+                toast.success("Session refreshed");
+              }}
+            >
+              <RefreshCw className="h-4 w-4" />
+              Refresh session
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2 rounded-2xl"
+              onClick={async () => {
+                await signOut();
+              }}
+            >
+              <RotateCcw className="h-4 w-4" />
+              Reload app
+            </Button>
           </div>
-        </Section>
+        </SettingsCard>
       </div>
     </PageContainer>
+  );
+}
+
+function SettingsCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="space-y-4 rounded-[24px] border border-border/80 bg-card p-5 sm:p-6">
+      <div>
+        <p className="text-lg font-semibold text-foreground">{title}</p>
+        <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+      </div>
+      {children}
+    </div>
   );
 }
 

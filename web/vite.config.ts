@@ -7,6 +7,11 @@ const repoRoot = path.resolve(__dirname, "..");
 export default defineConfig(({ mode }) => {
   const workspaceEnv = loadEnv(mode, __dirname, "");
   const repoEnv = loadEnv(mode, repoRoot, "");
+  const basePath =
+    process.env.ATOLL_WEB_BASE?.trim() ||
+    workspaceEnv.ATOLL_WEB_BASE?.trim() ||
+    repoEnv.ATOLL_WEB_BASE?.trim() ||
+    "/";
   const apiOrigin =
     process.env.ATOLL_API_ORIGIN?.trim() ||
     workspaceEnv.ATOLL_API_ORIGIN?.trim() ||
@@ -15,6 +20,7 @@ export default defineConfig(({ mode }) => {
 
   return {
     root: __dirname,
+    base: basePath,
     css: {
       postcss: path.resolve(__dirname, "postcss.config.js"),
     },
