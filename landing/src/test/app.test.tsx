@@ -30,6 +30,9 @@ describe("landing app", () => {
     expect(screen.getByAltText("Identity catalog")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Previous screenshot" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next screenshot" })).toBeInTheDocument();
+    expect(
+      screen.getByText(/This circular type of coral reef, called an atoll/i)
+    ).toBeInTheDocument();
     expect(screen.getByText("Identity Settings")).toBeInTheDocument();
     expect(screen.getByText("Helper preview")).toBeInTheDocument();
     expect(screen.queryByText("IDENTITY.md")).not.toBeInTheDocument();

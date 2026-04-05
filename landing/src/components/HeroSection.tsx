@@ -36,17 +36,20 @@ export function HeroSection() {
           </span>
         </motion.h1>
 
-        <motion.p
-          className="mx-auto max-w-2xl text-xl leading-relaxed text-muted-foreground md:text-2xl"
+        <motion.blockquote
+          className="hero-quote mx-auto max-w-4xl px-4 text-center text-[1.02rem] leading-[1.44] text-foreground/72 md:text-[1.26rem] lg:text-[1.48rem]"
           initial={{ opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.55, delay: 0.2 }}
         >
-          An atoll is a ring-shaped island that creates a calm, protected space in the middle of the ocean.
-          <br className="block mt-4" />
-          <br className="block mt-4" />
-          Atoll-OS creates that for your helpers, handling the setup and keeping everything running, so you can focus on your work.
-        </motion.p>
+          <span className="hero-quote-mark" aria-hidden="true">
+            “
+          </span>
+          This circular type of coral reef, called an atoll, is created as a ring of coral surrounds an undersea volcano that has risen above the water&apos;s surface. Long after the volcano has receded into the ocean, the atoll remains. The habitat inside the atoll, protected from the open sea by the sturdy reef, is called a lagoon. - Luis Marden
+          <span className="hero-quote-mark" aria-hidden="true">
+            ”
+          </span>
+        </motion.blockquote>
 
         <motion.div
           className="flex items-center justify-center pt-8"
