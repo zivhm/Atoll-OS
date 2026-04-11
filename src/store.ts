@@ -91,7 +91,7 @@ export const RUNTIME_INSTANCE_STATUSES = [
 ] as const;
 export type RuntimeInstanceStatus = (typeof RUNTIME_INSTANCE_STATUSES)[number];
 
-export const RUNTIME_TYPES = ["openclaw", "zeroclaw"] as const;
+export const RUNTIME_TYPES = ["openclaw", "zeroclaw", "hermes"] as const;
 export type RuntimeType = (typeof RUNTIME_TYPES)[number];
 
 export type RuntimeInstance = {
@@ -1318,7 +1318,7 @@ export function createStore(options: StoreOptions) {
   }
 
   function normalizeRuntimeType(value: unknown): RuntimeType {
-    if (value === "openclaw" || value === "zeroclaw") {
+    if (value === "openclaw" || value === "zeroclaw" || value === "hermes") {
       return value;
     }
     return "openclaw";

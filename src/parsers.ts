@@ -781,6 +781,7 @@ export function parseRuntimeSlackSettingsInput(
     slackAllowedUserIds?: unknown;
     slackReplyInThread?: unknown;
   };
+  const connector = getRuntimeConnector(runtimeInstance.runtimeType);
 
   const enabled = parseBooleanUnknown(
     body?.slackEnabled ?? body?.enabled,
@@ -800,12 +801,22 @@ export function parseRuntimeSlackSettingsInput(
     body?.slackReplyInThread,
     runtimeInstance.slackReplyInThread
   );
+  const supportsSlack =
+    connector.capabilities.slackBotToken ||
+    connector.capabilities.slackAppToken ||
+    connector.capabilities.slackAllowedChannelIds ||
+    connector.capabilities.slackAllowedUserIds ||
+    connector.capabilities.slackReplyInThread;
 
-  if (enabled && !botToken) {
+  if (!supportsSlack && enabled) {
+    throw new Error(`Validation failed: ${runtimeInstance.runtimeType} does not support slack`);
+  }
+
+  if (enabled && connector.capabilities.slackBotToken && !botToken) {
     throw new Error("Validation failed: slackBotToken is required when enabled");
   }
 
-  if (enabled && !appToken) {
+  if (enabled && connector.capabilities.slackAppToken && !appToken) {
     throw new Error("Validation failed: slackAppToken is required when enabled");
   }
 
@@ -848,6 +859,7 @@ export function parseRuntimeDiscordSettingsInput(
     discordReplyInThread?: unknown;
     discordRequireMention?: unknown;
   };
+  const connector = getRuntimeConnector(runtimeInstance.runtimeType);
 
   const enabled = parseBooleanUnknown(
     body?.discordEnabled ?? body?.enabled,
@@ -867,6 +879,19 @@ export function parseRuntimeDiscordSettingsInput(
     body?.discordRequireMention,
     runtimeInstance.discordRequireMention
   );
+  const supportsDiscord =
+    connector.capabilities.discordBotToken ||
+    connector.capabilities.discordAllowedGuildIds ||
+    connector.capabilities.discordAllowedChannelIds ||
+    connector.capabilities.discordReplyInThread;
+
+  if (!supportsDiscord && enabled) {
+    throw new Error(`Validation failed: ${runtimeInstance.runtimeType} does not support discord`);
+  }
+
+  if (enabled && connector.capabilities.discordBotToken && !botToken) {
+    throw new Error("Validation failed: discordBotToken is required when enabled");
+  }
 
   return {
     enabled,

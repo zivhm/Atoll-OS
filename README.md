@@ -179,6 +179,8 @@ All important configuration lives in the repo-root `.env`.
 | `RUNTIME_MODEL` | | Default LLM model for new helpers |
 | `RUNTIME_HTTP_TIMEOUT_MS` | | Runtime HTTP timeout in ms (default `3600000`) |
 | `RUNTIME_OPENCLAW_IMAGE` | | OpenClaw runtime image override |
+| `RUNTIME_ZEROCLAW_IMAGE` | | ZeroClaw runtime image override |
+| `RUNTIME_HERMES_IMAGE` | | Hermes runtime image override |
 | `RUNTIME_STARTUP_VALIDATION` | | Prerequisite validation: `strict`, `warn`, or `off` |
 | `RUNTIME_ALLOW_PUBLIC_BIND` | | Whether helper gateways bind to host loopback by default |
 | `RUNTIME_REQUIRE_PAIRING` | | Whether pairing is required for supported runtimes |
@@ -227,7 +229,7 @@ atoll-state.json          Local persisted state file
 
 | Setting | Value |
 | --- | --- |
-| Supported runtime | OpenClaw |
+| Supported runtimes | OpenClaw, ZeroClaw, Hermes |
 | Default runtime type | `openclaw` |
 | Default hosted provider | `openrouter` |
 | Default hosted model | `anthropic/claude-sonnet-4.6` |

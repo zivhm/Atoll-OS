@@ -1,10 +1,11 @@
 export type Channel = "whatsapp" | "telegram" | "custom";
 export type RuntimeStatus = "provisioning" | "running" | "stopped" | "error";
-export type RuntimeType = "zeroclaw" | "openclaw";
+export type RuntimeType = "zeroclaw" | "openclaw" | "hermes";
 export type AgentPresetCategory = string;
 export type RuntimeConnectorMaturity = "supported" | "beta";
 export type RuntimeHealthMode = "http" | "container";
 export type RuntimePresetMode = "exact" | "translated";
+export type RuntimeChatTransport = "openclaw-gateway" | "http-message" | "openai-chat-completions";
 export type RuntimeConfigFieldKind = "string" | "number" | "boolean" | "json";
 export type SettingsConfigFieldKind = "text" | "boolean" | "select";
 
@@ -13,11 +14,22 @@ export interface RuntimeConnectorCapabilities {
   telegramToken: boolean;
   telegramAllowFrom: boolean;
   telegramReplyInPrivate: boolean;
+  slackBotToken: boolean;
+  slackAppToken: boolean;
+  slackAllowedChannelIds: boolean;
+  slackAllowedUserIds: boolean;
+  slackReplyInThread: boolean;
+  discordBotToken: boolean;
+  discordAllowedGuildIds: boolean;
+  discordAllowedChannelIds: boolean;
+  discordReplyInThread: boolean;
+  discordRequireMention: boolean;
   pairingInfo: boolean;
   pairingAction: boolean;
   chatAction: boolean;
   webhookAction: boolean;
   httpHealth: boolean;
+  sharedFiles: boolean;
 }
 
 export interface RuntimeConfigFieldDescriptor {
@@ -43,6 +55,8 @@ export interface RuntimeCatalogItem {
   defaultAllowPublicBind: boolean;
   healthMode: RuntimeHealthMode;
   healthPath?: string;
+  chatTransport: RuntimeChatTransport;
+  chatEndpoint?: string;
   presetMode: RuntimePresetMode;
   capabilities: RuntimeConnectorCapabilities;
   runtimeConfigFields: RuntimeConfigFieldDescriptor[];
@@ -93,6 +107,7 @@ export interface HealthResponse {
     containerCli: string;
     image: string;
     openclawImage: string;
+    hermesImage: string;
     supportedRuntimeTypes: RuntimeType[];
     defaultRuntimeType: RuntimeType;
     network: string;

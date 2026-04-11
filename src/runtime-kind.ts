@@ -2,24 +2,38 @@ import type { RuntimeType } from "./store.js";
 
 export const DEFAULT_ZEROCLAW_RUNTIME_IMAGE = "zivhm/zeroclaw-runtime";
 export const DEFAULT_OPENCLAW_RUNTIME_IMAGE = "zivhm/openclaw";
+export const DEFAULT_HERMES_RUNTIME_IMAGE = "nousresearch/hermes-agent";
 export const DEFAULT_RUNTIME_TYPE: RuntimeType = "openclaw";
-export const ALL_RUNTIME_TYPES: RuntimeType[] = ["openclaw", "zeroclaw"];
+export const ALL_RUNTIME_TYPES: RuntimeType[] = ["openclaw", "zeroclaw", "hermes"];
 
 export type RuntimeConnectorMaturity = "supported" | "beta";
 export type RuntimeHealthMode = "http" | "container";
 export type RuntimePresetMode = "exact" | "translated";
 export type RuntimeProcessMode = "daemon" | "gateway";
+export type RuntimeChatTransport = "openclaw-gateway" | "http-message" | "openai-chat-completions";
+export type RuntimeAuthTransport = "bearer" | "webhook-secret";
 
 export type RuntimeConnectorCapabilities = {
   llmConfig: boolean;
   telegramToken: boolean;
   telegramAllowFrom: boolean;
   telegramReplyInPrivate: boolean;
+  slackBotToken: boolean;
+  slackAppToken: boolean;
+  slackAllowedChannelIds: boolean;
+  slackAllowedUserIds: boolean;
+  slackReplyInThread: boolean;
+  discordBotToken: boolean;
+  discordAllowedGuildIds: boolean;
+  discordAllowedChannelIds: boolean;
+  discordReplyInThread: boolean;
+  discordRequireMention: boolean;
   pairingInfo: boolean;
   pairingAction: boolean;
   chatAction: boolean;
   webhookAction: boolean;
   httpHealth: boolean;
+  sharedFiles: boolean;
 };
 
 export type RuntimeConfigFieldDescriptor = {
@@ -44,6 +58,9 @@ export type RuntimeConnector = {
   defaultAllowPublicBind: boolean;
   healthMode: RuntimeHealthMode;
   healthPath?: string;
+  chatTransport: RuntimeChatTransport;
+  chatEndpoint?: string;
+  authTransport?: RuntimeAuthTransport;
   presetMode: RuntimePresetMode;
   capabilities: RuntimeConnectorCapabilities;
   runtimeConfigFields?: RuntimeConfigFieldDescriptor[];
@@ -82,11 +99,37 @@ const DEFAULT_RUNTIME_HEALTHCHECK_TIMEOUT = "10s";
 const DEFAULT_RUNTIME_HEALTHCHECK_START_PERIOD = "15s";
 const DEFAULT_RUNTIME_HEALTHCHECK_RETRIES = "3";
 
+const DEFAULT_CAPABILITIES: RuntimeConnectorCapabilities = {
+  llmConfig: true,
+  telegramToken: false,
+  telegramAllowFrom: false,
+  telegramReplyInPrivate: false,
+  slackBotToken: false,
+  slackAppToken: false,
+  slackAllowedChannelIds: false,
+  slackAllowedUserIds: false,
+  slackReplyInThread: false,
+  discordBotToken: false,
+  discordAllowedGuildIds: false,
+  discordAllowedChannelIds: false,
+  discordReplyInThread: false,
+  discordRequireMention: false,
+  pairingInfo: false,
+  pairingAction: false,
+  chatAction: true,
+  webhookAction: false,
+  httpHealth: true,
+  sharedFiles: true
+};
+
 const RUNTIME_ENVIRONMENT: Record<RuntimeType, Record<string, string>> = {
   openclaw: {
     NODE_OPTIONS: "--no-deprecation"
   },
-  zeroclaw: {}
+  zeroclaw: {},
+  hermes: {
+    HERMES_CONFIG_DIR: "/home/hermes/.hermes"
+  }
 };
 
 const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
@@ -100,17 +143,24 @@ const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
     defaultAllowPublicBind: true,
     healthMode: "http",
     healthPath: "/healthz",
+    chatTransport: "openclaw-gateway",
+    authTransport: "bearer",
     presetMode: "exact",
     capabilities: {
-      llmConfig: true,
+      ...DEFAULT_CAPABILITIES,
       telegramToken: true,
       telegramAllowFrom: true,
       telegramReplyInPrivate: true,
-      pairingInfo: false,
-      pairingAction: false,
-      chatAction: true,
-      webhookAction: false,
-      httpHealth: true
+      slackBotToken: true,
+      slackAppToken: true,
+      slackAllowedChannelIds: true,
+      slackAllowedUserIds: true,
+      slackReplyInThread: true,
+      discordBotToken: true,
+      discordAllowedGuildIds: true,
+      discordAllowedChannelIds: true,
+      discordReplyInThread: true,
+      discordRequireMention: true
     }
   },
   zeroclaw: {
@@ -123,17 +173,48 @@ const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
     defaultAllowPublicBind: true,
     healthMode: "http",
     healthPath: "/health",
+    chatTransport: "http-message",
+    chatEndpoint: "/webhook",
+    authTransport: "webhook-secret",
     presetMode: "exact",
     capabilities: {
-      llmConfig: true,
+      ...DEFAULT_CAPABILITIES,
       telegramToken: true,
       telegramAllowFrom: true,
       telegramReplyInPrivate: true,
       pairingInfo: true,
       pairingAction: true,
-      chatAction: true,
-      webhookAction: true,
-      httpHealth: true
+      webhookAction: true
+    }
+  },
+  hermes: {
+    id: "hermes",
+    label: "Hermes",
+    maturity: "beta",
+    imageEnvVar: "RUNTIME_HERMES_IMAGE",
+    defaultImage: DEFAULT_HERMES_RUNTIME_IMAGE,
+    defaultRequirePairing: false,
+    defaultAllowPublicBind: true,
+    healthMode: "http",
+    healthPath: "/health",
+    chatTransport: "openai-chat-completions",
+    chatEndpoint: "/v1/chat/completions",
+    authTransport: "bearer",
+    presetMode: "translated",
+    capabilities: {
+      ...DEFAULT_CAPABILITIES,
+      telegramToken: true,
+      telegramAllowFrom: true,
+      telegramReplyInPrivate: true,
+      slackBotToken: true,
+      slackAllowedChannelIds: true,
+      slackAllowedUserIds: true,
+      slackReplyInThread: true,
+      discordBotToken: true,
+      discordAllowedGuildIds: true,
+      discordAllowedChannelIds: true,
+      discordReplyInThread: true,
+      discordRequireMention: true
     }
   }
 };
@@ -181,11 +262,41 @@ const RUNTIME_DESCRIPTORS: Record<RuntimeType, RuntimeDescriptor> = {
       "--port",
       String(gatewayPort)
     ]
+  },
+  hermes: {
+    dataRoot: "/hermes-data",
+    mountPath: "/home/hermes/.hermes",
+    workspaceDir: "/hermes-data/atoll/workspace",
+    configPath: "/hermes-data/config.yaml",
+    extraSeedDirectories: ["/hermes-data/atoll", "/hermes-data/logs", "/hermes-data/sessions"],
+    seedOwner: "1000:1000",
+    seedPermissions: {
+      dataRootMode: "700",
+      configFileMode: "600",
+      workspaceFileMode: "644"
+    },
+    resolveLaunchArgs: ({ image, gatewayPort }) => [
+      image,
+      "hermes",
+      "gateway",
+      "--host",
+      "0.0.0.0",
+      "--port",
+      String(gatewayPort)
+    ]
   }
 };
 
 function listRuntimeConnectors(runtimeTypes: RuntimeType[] = ALL_RUNTIME_TYPES): RuntimeConnector[] {
   return runtimeTypes.map((runtimeType) => getRuntimeConnector(runtimeType));
+}
+
+export function getRuntimeTypes(): RuntimeType[] {
+  return [...ALL_RUNTIME_TYPES];
+}
+
+export function getRuntimeConnectors(runtimeTypes: RuntimeType[] = ALL_RUNTIME_TYPES): RuntimeConnector[] {
+  return listRuntimeConnectors(runtimeTypes);
 }
 
 export function getRuntimeConnector(runtimeType: RuntimeType | undefined): RuntimeConnector {
@@ -200,7 +311,7 @@ export function normalizeRuntimeType(
   value: unknown,
   fallback: RuntimeType = DEFAULT_RUNTIME_TYPE
 ): RuntimeType {
-  if (value === "openclaw" || value === "zeroclaw") {
+  if (value === "openclaw" || value === "zeroclaw" || value === "hermes") {
     return value;
   }
   return fallback;
@@ -281,13 +392,15 @@ export function resolveRuntimeImageForType(input: {
   runtimeImages?: Record<RuntimeType, string>;
   zeroclawImage?: string;
   openclawImage?: string;
+  hermesImage?: string;
 }): string {
   const connector = getRuntimeConnector(input.runtimeType);
   const runtimeImages =
     input.runtimeImages ??
     {
       openclaw: input.openclawImage ?? "",
-      zeroclaw: input.zeroclawImage ?? ""
+      zeroclaw: input.zeroclawImage ?? "",
+      hermes: input.hermesImage ?? ""
     };
   const configured = runtimeImages[input.runtimeType]?.trim();
   return configured || connector.defaultImage || "";
@@ -319,5 +432,5 @@ export function buildRuntimeCatalog(input: {
 }
 
 export function isRuntimeType(value: string): value is RuntimeType {
-  return value === "openclaw" || value === "zeroclaw";
+  return value === "openclaw" || value === "zeroclaw" || value === "hermes";
 }

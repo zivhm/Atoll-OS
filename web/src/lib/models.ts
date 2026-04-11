@@ -325,7 +325,7 @@ export function parseIntegrationIdListInput(raw: string): string[] {
   return [...new Set(items)];
 }
 
-const PRODUCT_RUNTIME_ORDER: RuntimeCatalogItem["id"][] = ["openclaw", "zeroclaw"];
+const PRODUCT_RUNTIME_ORDER: RuntimeCatalogItem["id"][] = ["openclaw", "zeroclaw", "hermes"];
 
 export function getVisibleRuntimeCatalog(items: RuntimeCatalogItem[]): RuntimeCatalogItem[] {
   return [...items]

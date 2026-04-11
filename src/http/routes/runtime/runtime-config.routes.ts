@@ -196,7 +196,11 @@ export function registerRuntimeConfigRoutes(app: FastifyInstance, deps: RuntimeR
       const headers: Record<string, string> = {
         "Content-Type": "application/json"
       };
-      if (token && runtimeInstance.runtimeType === "zeroclaw" && !runtimeInstance.requirePairing) {
+      if (
+        token &&
+        connector.authTransport === "webhook-secret" &&
+        !runtimeInstance.requirePairing
+      ) {
         headers["X-Webhook-Secret"] = token;
       } else if (token) {
         headers.Authorization = `Bearer ${token}`;

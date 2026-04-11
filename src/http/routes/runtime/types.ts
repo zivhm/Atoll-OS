@@ -13,6 +13,7 @@ export type RuntimeRouteAuthContext = {
 export type RuntimeRouteConfig = {
   runtimeImage: string;
   runtimeOpenclawImage: string;
+  runtimeHermesImage: string;
   runtimeEventsMaxEntries: number;
   runtimeEventsMaxAgeDays: number;
   supportedRuntimeTypes: RuntimeType[];

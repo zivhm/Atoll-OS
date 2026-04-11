@@ -46,6 +46,7 @@ import {
 import {
   ALL_RUNTIME_TYPES,
   buildRuntimeCatalog,
+  DEFAULT_HERMES_RUNTIME_IMAGE,
   DEFAULT_OPENCLAW_RUNTIME_IMAGE,
   DEFAULT_ZEROCLAW_RUNTIME_IMAGE,
   getRuntimeDescriptor,
@@ -92,6 +93,7 @@ type AppConfig = {
   stateFilePath: string;
   runtimeImage: string;
   runtimeOpenclawImage: string;
+  runtimeHermesImage: string;
   supportedRuntimeTypes: RuntimeType[];
   defaultRuntimeType: RuntimeType;
   runtimeCatalog: ReturnType<typeof buildRuntimeCatalog>;
@@ -168,7 +170,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
       resolveRuntimeImageForType({
         runtimeType: instance.runtimeType,
         zeroclawImage: config.runtimeImage,
-        openclawImage: config.runtimeOpenclawImage
+        openclawImage: config.runtimeOpenclawImage,
+        hermesImage: config.runtimeHermesImage
       }),
     runtimeProvisioningStaleMs: config.runtimeProvisioningStaleMs,
     runtimeReconcileIntervalMs: config.runtimeReconcileIntervalMs,
@@ -676,7 +679,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
       const expectedImage = resolveRuntimeImageForType({
         runtimeType,
         zeroclawImage: config.runtimeImage,
-        openclawImage: config.runtimeOpenclawImage
+        openclawImage: config.runtimeOpenclawImage,
+        hermesImage: config.runtimeHermesImage
       });
       return normalizeImageRef(container.image) === normalizeImageRef(expectedImage);
     });
@@ -967,7 +971,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
             image: resolveRuntimeImageForType({
               runtimeType: runtimeInstance.runtimeType,
               zeroclawImage: config.runtimeImage,
-              openclawImage: config.runtimeOpenclawImage
+              openclawImage: config.runtimeOpenclawImage,
+              hermesImage: config.runtimeHermesImage
             }),
             gatewayPort: runtimeInstance.gatewayPort,
             requirePairing: runtimeInstance.requirePairing,
@@ -1353,6 +1358,10 @@ function resolveConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     overrides.runtimeOpenclawImage ??
     process.env.RUNTIME_OPENCLAW_IMAGE ??
     DEFAULT_OPENCLAW_RUNTIME_IMAGE;
+  const runtimeHermesImage =
+    overrides.runtimeHermesImage ??
+    process.env.RUNTIME_HERMES_IMAGE ??
+    DEFAULT_HERMES_RUNTIME_IMAGE;
   const supportedRuntimeTypes =
     overrides.supportedRuntimeTypes ??
     resolveSupportedRuntimeTypes(process.env.ATOLL_SUPPORTED_RUNTIME_TYPES, ALL_RUNTIME_TYPES);
@@ -1431,7 +1440,8 @@ function resolveConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       runtimeTypes: supportedRuntimeTypes,
       runtimeImages: {
         openclaw: runtimeOpenclawImage,
-        zeroclaw: runtimeImage
+        zeroclaw: runtimeImage,
+        hermes: runtimeHermesImage
       },
       runtimeGatewayPort,
       runtimeRequirePairing,
@@ -1457,6 +1467,7 @@ function resolveConfig(overrides: Partial<AppConfig> = {}): AppConfig {
     stateFilePath,
     runtimeImage,
     runtimeOpenclawImage,
+    runtimeHermesImage,
     supportedRuntimeTypes,
     defaultRuntimeType,
     runtimeCatalog,
@@ -1538,7 +1549,8 @@ async function validateRuntimeStartupPrereqs(
         image: resolveRuntimeImageForType({
           runtimeType,
           zeroclawImage: config.runtimeImage,
-          openclawImage: config.runtimeOpenclawImage
+          openclawImage: config.runtimeOpenclawImage,
+          hermesImage: config.runtimeHermesImage
         }),
         network: config.runtimeNetwork
       });

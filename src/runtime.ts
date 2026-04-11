@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
 
 import {
+  DEFAULT_HERMES_RUNTIME_IMAGE,
   DEFAULT_OPENCLAW_RUNTIME_IMAGE,
   DEFAULT_ZEROCLAW_RUNTIME_IMAGE,
   getRuntimeConnector,
@@ -266,7 +267,7 @@ export async function provisionRuntimeContainer(input: ProvisionRuntimeContainer
   const image =
     input.image?.trim() ||
     connector.defaultImage ||
-    (runtimeType === "openclaw" ? DEFAULT_OPENCLAW_RUNTIME_IMAGE : DEFAULT_ZEROCLAW_RUNTIME_IMAGE);
+    resolveDefaultRuntimeImage(runtimeType);
   const gatewayPort = input.gatewayPort ?? connector.defaultGatewayPort ?? DEFAULT_GATEWAY_PORT;
   const allowPublicBind = input.allowPublicBind ?? true;
   const runtimeProcessMode = getRuntimeProcessMode();
@@ -429,6 +430,71 @@ export async function writeRuntimeConfig(input: WriteRuntimeConfigInput): Promis
         CONFIG_SEED_IMAGE,
         "-c",
         openClawSeedCommands
+      ],
+      `seed runtime config for volume ${input.volumeName}`
+    );
+    return;
+  }
+
+  if (runtimeType === "hermes") {
+    const runtimeConfigYaml = buildHermesConfigYaml({
+      llm: input.llm,
+      telegram: input.telegram,
+      slack: input.slack,
+      discord: input.discord,
+      gatewayPort,
+      gatewayAuthToken: input.bearerToken
+    });
+    const runtimeEnvFile = buildHermesEnvFile({
+      llm: input.llm,
+      telegram: input.telegram,
+      slack: input.slack,
+      discord: input.discord,
+      gatewayPort,
+      gatewayAuthToken: input.bearerToken
+    });
+    const runtimeConfigB64 = Buffer.from(runtimeConfigYaml, "utf8").toString("base64");
+    const runtimeEnvB64 = Buffer.from(runtimeEnvFile, "utf8").toString("base64");
+    const hermesSeedCommands = buildRuntimeSeedCommands({
+      descriptor,
+      appendSoulOnboarding: workspaceSeed.appendSoulOnboarding,
+      extraFiles: [
+        {
+          envVar: "ATOLL_RUNTIME_ENV_B64",
+          filePath: `${descriptor.dataRoot}/.env`
+        }
+      ]
+    }).join(" && ");
+
+    await runDocker(
+      [
+        "run",
+        "--rm",
+        "--entrypoint",
+        "sh",
+        "-v",
+        `${input.volumeName}:${descriptor.dataRoot}`,
+        "-e",
+        `ATOLL_RUNTIME_CONFIG_B64=${runtimeConfigB64}`,
+        "-e",
+        `ATOLL_RUNTIME_ENV_B64=${runtimeEnvB64}`,
+        "-e",
+        `ATOLL_RUNTIME_IDENTITY_B64=${identityMarkdownB64}`,
+        "-e",
+        `ATOLL_RUNTIME_SOUL_B64=${soulMarkdownB64}`,
+        "-e",
+        `ATOLL_RUNTIME_USER_B64=${userMarkdownB64}`,
+        "-e",
+        `ATOLL_RUNTIME_TOOLS_B64=${toolsMarkdownB64}`,
+        "-e",
+        `ATOLL_RUNTIME_SOUL_ONBOARDING_B64=${soulOnboardingAddonMarkdownB64}`,
+        "-e",
+        `ATOLL_RUNTIME_USER_ONBOARDING_B64=${userOnboardingAddonMarkdownB64}`,
+        "-e",
+        `ATOLL_RUNTIME_INTEGRATIONS_B64=${integrationsJsonB64}`,
+        CONFIG_SEED_IMAGE,
+        "-c",
+        hermesSeedCommands
       ],
       `seed runtime config for volume ${input.volumeName}`
     );
@@ -925,16 +991,109 @@ export function buildOpenClawConfigJson(input: {
   return `${JSON.stringify(config, null, 2)}\n`;
 }
 
+export function buildHermesConfigYaml(input: {
+  llm: RuntimeLlmConfig;
+  telegram: RuntimeTelegramConfig;
+  slack: RuntimeSlackConfig;
+  discord?: RuntimeDiscordConfig;
+  gatewayPort: number;
+  gatewayAuthToken?: string;
+}): string {
+  const discord = resolveRuntimeDiscordConfig(input.discord);
+  const lines = [
+    `model: ${toYamlString(resolveOpenClawModelReference(input.llm.provider, input.llm.model))}`,
+    `workspace: ${toYamlString("/home/hermes/.hermes/atoll/workspace")}`,
+    "api_server:",
+    "  enabled: true",
+    `  host: ${toYamlString("0.0.0.0")}`,
+    `  port: ${input.gatewayPort}`,
+    `  auth_env: ${toYamlString("API_SERVER_KEY")}`,
+    "channels:",
+    "  telegram:",
+    `    enabled: ${toYamlBoolean(input.telegram.enabled)}`,
+    `    allowed_users: ${toYamlStringArray(input.telegram.allowFrom.length > 0 ? input.telegram.allowFrom : ["*"])}`,
+    `    reply_in_private: ${toYamlBoolean(input.telegram.replyInPrivate)}`,
+    "  slack:",
+    `    enabled: ${toYamlBoolean(input.slack.enabled)}`,
+    `    allowed_channels: ${toYamlStringArray(input.slack.allowedChannelIds)}`,
+    `    allowed_users: ${toYamlStringArray(input.slack.allowedUserIds)}`,
+    `    reply_in_thread: ${toYamlBoolean(input.slack.replyInThread)}`,
+    "  discord:",
+    `    enabled: ${toYamlBoolean(discord.enabled)}`,
+    `    allowed_guilds: ${toYamlStringArray(discord.allowedGuildIds)}`,
+    `    allowed_channels: ${toYamlStringArray(discord.allowedChannelIds)}`,
+    `    reply_in_thread: ${toYamlBoolean(discord.replyInThread)}`,
+    `    require_mention: ${toYamlBoolean(discord.requireMention ?? true)}`
+  ];
+
+  return `${lines.join("\n")}\n`;
+}
+
+export function buildHermesEnvFile(input: {
+  llm: RuntimeLlmConfig;
+  telegram: RuntimeTelegramConfig;
+  slack: RuntimeSlackConfig;
+  discord?: RuntimeDiscordConfig;
+  gatewayPort: number;
+  gatewayAuthToken?: string;
+}): string {
+  const discord = resolveRuntimeDiscordConfig(input.discord);
+  const providerApiKeyEnv = resolveProviderApiKeyEnvName(input.llm.provider);
+  const lines = [
+    "API_SERVER_ENABLED=true",
+    "API_SERVER_HOST=0.0.0.0",
+    `API_SERVER_PORT=${input.gatewayPort}`,
+    `API_SERVER_KEY=${(input.gatewayAuthToken?.trim() || "atoll-hermes-token").replaceAll("\n", "")}`,
+    "MESSAGING_CWD=/home/hermes/.hermes/atoll/workspace"
+  ];
+
+  if (providerApiKeyEnv) {
+    lines.push(`${providerApiKeyEnv}=${input.llm.apiKey}`);
+  }
+
+  if (input.telegram.enabled && input.telegram.botToken?.trim()) {
+    lines.push(`TELEGRAM_BOT_TOKEN=${input.telegram.botToken.trim()}`);
+    lines.push(`TELEGRAM_ALLOWED_USERS=${(input.telegram.allowFrom.length > 0 ? input.telegram.allowFrom : ["*"]).join(",")}`);
+  }
+
+  if (input.slack.enabled && input.slack.botToken?.trim()) {
+    lines.push(`SLACK_BOT_TOKEN=${input.slack.botToken.trim()}`);
+    if (input.slack.appToken?.trim()) {
+      lines.push(`SLACK_APP_TOKEN=${input.slack.appToken.trim()}`);
+    }
+    if (input.slack.allowedChannelIds.length > 0) {
+      lines.push(`SLACK_ALLOWED_CHANNELS=${input.slack.allowedChannelIds.join(",")}`);
+    }
+    if (input.slack.allowedUserIds.length > 0) {
+      lines.push(`SLACK_ALLOWED_USERS=${input.slack.allowedUserIds.join(",")}`);
+    }
+  }
+
+  if (discord.enabled && discord.botToken?.trim()) {
+    lines.push(`DISCORD_BOT_TOKEN=${discord.botToken.trim()}`);
+    if (discord.allowedGuildIds.length > 0) {
+      lines.push(`DISCORD_ALLOWED_GUILDS=${discord.allowedGuildIds.join(",")}`);
+    }
+    if (discord.allowedChannelIds.length > 0) {
+      lines.push(`DISCORD_ALLOWED_CHANNELS=${discord.allowedChannelIds.join(",")}`);
+    }
+  }
+
+  return `${lines.join("\n")}\n`;
+}
+
 export async function readRuntimeBearerToken(input: {
   runtimeType?: RuntimeType;
   volumeName: string;
 }): Promise<string | undefined> {
   const runtimeType = normalizeRuntimeType(input.runtimeType);
-  if (runtimeType !== "openclaw" && runtimeType !== "zeroclaw") {
+  if (runtimeType !== "openclaw" && runtimeType !== "zeroclaw" && runtimeType !== "hermes") {
     return undefined;
   }
 
   const descriptor = getRuntimeDescriptor(runtimeType);
+  const filePath =
+    runtimeType === "hermes" ? `${descriptor.dataRoot}/.env` : descriptor.configPath;
   const output = await runDocker(
     [
       "run",
@@ -945,7 +1104,7 @@ export async function readRuntimeBearerToken(input: {
       "sh",
       CONFIG_SEED_IMAGE,
       "-lc",
-      `if [ -f ${toShellSingleQuoted(descriptor.configPath)} ]; then cat ${toShellSingleQuoted(descriptor.configPath)}; fi`
+      `if [ -f ${toShellSingleQuoted(filePath)} ]; then cat ${toShellSingleQuoted(filePath)}; fi`
     ],
     `read runtime bearer token ${input.volumeName}`,
     true
@@ -957,6 +1116,10 @@ export async function readRuntimeBearerToken(input: {
 function buildRuntimeSeedCommands(input: {
   descriptor: RuntimeDescriptor;
   appendSoulOnboarding: boolean;
+  extraFiles?: Array<{
+    envVar: string;
+    filePath: string;
+  }>;
 }): string[] {
   const { descriptor } = input;
   const identityPath = `${descriptor.workspaceDir}/IDENTITY.md`;
@@ -974,6 +1137,10 @@ function buildRuntimeSeedCommands(input: {
     `[ -f ${userPath} ] || echo "$ATOLL_RUNTIME_USER_B64" | base64 -d > ${userPath}`,
     `[ -f ${toolsPath} ] || echo "$ATOLL_RUNTIME_TOOLS_B64" | base64 -d > ${toolsPath}`
   ];
+
+  for (const extraFile of input.extraFiles ?? []) {
+    commands.push(`echo "$${extraFile.envVar}" | base64 -d > ${extraFile.filePath}`);
+  }
 
   if (input.appendSoulOnboarding) {
     commands.push(
@@ -1469,6 +1636,10 @@ function parseRuntimeBearerToken(configContents: string): string | undefined {
     return undefined;
   }
 
+  if (/^\s*API_SERVER_KEY=/mu.test(configContents)) {
+    return parseHermesApiServerKey(configContents);
+  }
+
   if (configContents.trimStart().startsWith("{")) {
     return parseOpenClawBearerToken(configContents);
   }
@@ -1513,6 +1684,17 @@ function parseZeroClawWebhookSecret(configContents: string): string | undefined 
   } catch {
     return undefined;
   }
+}
+
+function parseHermesApiServerKey(configContents: string): string | undefined {
+  const match = /^\s*API_SERVER_KEY\s*=\s*(.+)\s*$/mu.exec(configContents);
+  const rawValue = match?.[1]?.trim();
+  if (!rawValue) {
+    return undefined;
+  }
+
+  const normalized = rawValue.replace(/^['"]|['"]$/g, "").trim();
+  return normalized || undefined;
 }
 
 function extractIdentityField(markdown: string, label: string): string | undefined {
@@ -1676,6 +1858,16 @@ function parsePortNumber(value: string | undefined): number {
   return parsed;
 }
 
+function resolveDefaultRuntimeImage(runtimeType: RuntimeType): string {
+  if (runtimeType === "openclaw") {
+    return DEFAULT_OPENCLAW_RUNTIME_IMAGE;
+  }
+  if (runtimeType === "zeroclaw") {
+    return DEFAULT_ZEROCLAW_RUNTIME_IMAGE;
+  }
+  return DEFAULT_HERMES_RUNTIME_IMAGE;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   if (!value || typeof value !== "object") {
     return undefined;
@@ -1732,6 +1924,22 @@ export function buildRuntimeConfigToml(input: {
   }
 
   return `${lines.join("\n")}\n`;
+}
+
+function toYamlString(value: string): string {
+  const escaped = value.replaceAll("\\", "\\\\").replaceAll('"', '\\"');
+  return `"${escaped}"`;
+}
+
+function toYamlBoolean(value: boolean): string {
+  return value ? "true" : "false";
+}
+
+function toYamlStringArray(values: string[]): string {
+  if (values.length === 0) {
+    return "[]";
+  }
+  return `[${values.map((value) => toYamlString(value.trim())).join(", ")}]`;
 }
 
 function buildTelegramConfigBlock(telegram: RuntimeTelegramConfig): string[] {

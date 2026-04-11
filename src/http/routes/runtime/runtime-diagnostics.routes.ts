@@ -57,12 +57,14 @@ export function registerRuntimeDiagnosticsRoutes(app: FastifyInstance, deps: Run
           ? resolveRuntimeImageForType({
               runtimeType: runtimeInstance.runtimeType,
               zeroclawImage: config.runtimeImage,
-              openclawImage: config.runtimeOpenclawImage
+              openclawImage: config.runtimeOpenclawImage,
+              hermesImage: config.runtimeHermesImage
             })
           : resolveRuntimeImageForType({
               runtimeType: config.defaultRuntimeType,
               zeroclawImage: config.runtimeImage,
-              openclawImage: config.runtimeOpenclawImage
+              openclawImage: config.runtimeOpenclawImage,
+              hermesImage: config.runtimeHermesImage
             }),
         network: config.runtimeNetwork,
         containerName: runtimeInstance?.containerName
@@ -123,7 +125,8 @@ export function registerRuntimeDiagnosticsRoutes(app: FastifyInstance, deps: Run
         image: resolveRuntimeImageForType({
           runtimeType: runtimeInstance.runtimeType,
           zeroclawImage: config.runtimeImage,
-          openclawImage: config.runtimeOpenclawImage
+          openclawImage: config.runtimeOpenclawImage,
+          hermesImage: config.runtimeHermesImage
         }),
         network: runtimeInstance.networkName,
         containerName: runtimeInstance.containerName
@@ -203,7 +206,8 @@ export function registerRuntimeDiagnosticsRoutes(app: FastifyInstance, deps: Run
         image: resolveRuntimeImageForType({
           runtimeType: runtimeInstance.runtimeType,
           zeroclawImage: config.runtimeImage,
-          openclawImage: config.runtimeOpenclawImage
+          openclawImage: config.runtimeOpenclawImage,
+          hermesImage: config.runtimeHermesImage
         }),
         network: config.runtimeNetwork,
         containerName: runtimeInstance.containerName
@@ -277,7 +281,8 @@ export function registerRuntimeDiagnosticsRoutes(app: FastifyInstance, deps: Run
     const runtimeImage = resolveRuntimeImageForType({
       runtimeType: runtimeInstance.runtimeType,
       zeroclawImage: config.runtimeImage,
-      openclawImage: config.runtimeOpenclawImage
+      openclawImage: config.runtimeOpenclawImage,
+      hermesImage: config.runtimeHermesImage
     });
     const tenant = store.getTenant(runtimeInstance.tenantId);
     const agent = store.getAgent(runtimeInstance.agentId);

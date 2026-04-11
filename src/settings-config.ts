@@ -135,13 +135,22 @@ export const SETTINGS_CONFIG_FIELDS: SettingsConfigFieldDefinition[] = [
     placeholder: "zivhm/openclaw"
   },
   {
+    key: "RUNTIME_HERMES_IMAGE",
+    groupId: "runtime-behavior",
+    label: "Hermes image",
+    kind: "text",
+    helpText: "Image used for Hermes runtimes.",
+    defaultValue: "nousresearch/hermes-agent",
+    placeholder: "nousresearch/hermes-agent"
+  },
+  {
     key: "ATOLL_SUPPORTED_RUNTIME_TYPES",
     groupId: "runtime-behavior",
     label: "Supported runtime types",
     kind: "text",
     helpText: "Optional comma-separated allowlist for runtime types. Leave blank for built-in support.",
     defaultValue: "",
-    placeholder: "openclaw,zeroclaw"
+    placeholder: "openclaw,zeroclaw,hermes"
   },
   {
     key: "ATOLL_DEFAULT_RUNTIME_TYPE",
@@ -153,7 +162,8 @@ export const SETTINGS_CONFIG_FIELDS: SettingsConfigFieldDefinition[] = [
     options: [
       { value: "", label: "Built-in default" },
       { value: "openclaw", label: "OpenClaw" },
-      { value: "zeroclaw", label: "ZeroClaw" }
+      { value: "zeroclaw", label: "ZeroClaw" },
+      { value: "hermes", label: "Hermes" }
     ]
   },
   {

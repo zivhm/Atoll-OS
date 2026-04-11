@@ -135,12 +135,16 @@ export function SlackIntegrationCard({
   appToken,
   onAppTokenChange,
   appTokenPlaceholder,
+  showAppToken,
   allowedChannelIds,
   onAllowedChannelIdsChange,
+  showAllowedChannelIds,
   allowedUserIds,
   onAllowedUserIdsChange,
+  showAllowedUserIds,
   replyInThread,
   onReplyInThreadChange,
+  showReplyInThread,
 }: IntegrationCardProps & {
   botToken: string;
   onBotTokenChange: (value: string) => void;
@@ -148,12 +152,16 @@ export function SlackIntegrationCard({
   appToken: string;
   onAppTokenChange: (value: string) => void;
   appTokenPlaceholder: string;
+  showAppToken?: boolean;
   allowedChannelIds: string;
   onAllowedChannelIdsChange: (value: string) => void;
+  showAllowedChannelIds?: boolean;
   allowedUserIds: string;
   onAllowedUserIdsChange: (value: string) => void;
+  showAllowedUserIds?: boolean;
   replyInThread: boolean;
   onReplyInThreadChange: (value: boolean) => void;
+  showReplyInThread?: boolean;
 }) {
   return (
     <IntegrationSettingsCard
@@ -183,6 +191,7 @@ export function SlackIntegrationCard({
         </p>
       </LabeledField>
 
+      {showAppToken !== false ? (
       <LabeledField label="App token">
         <Input
           type="password"
@@ -194,7 +203,9 @@ export function SlackIntegrationCard({
           Slack app settings: Basic Information → App-Level Tokens (`connections:write`).
         </p>
       </LabeledField>
+      ) : null}
 
+      {showAllowedChannelIds !== false ? (
       <LabeledField label="Allowed channel IDs">
         <Textarea
           value={allowedChannelIds}
@@ -203,7 +214,9 @@ export function SlackIntegrationCard({
           placeholder="C1234567890, D1234567890"
         />
       </LabeledField>
+      ) : null}
 
+      {showAllowedUserIds !== false ? (
       <LabeledField label="Allowed user IDs">
         <Textarea
           value={allowedUserIds}
@@ -212,7 +225,9 @@ export function SlackIntegrationCard({
           placeholder="U1234567890"
         />
       </LabeledField>
+      ) : null}
 
+      {showReplyInThread !== false ? (
       <ChannelBehaviorToggle
         title="Reply in thread"
         description="Reply in the originating Slack thread when possible."
@@ -220,6 +235,7 @@ export function SlackIntegrationCard({
         checked={replyInThread}
         onCheckedChange={onReplyInThreadChange}
       />
+      ) : null}
     </IntegrationSettingsCard>
   );
 }
@@ -237,20 +253,26 @@ export function DiscordIntegrationCard({
   botTokenPlaceholder,
   allowedGuildIds,
   onAllowedGuildIdsChange,
+  showAllowedGuildIds,
   allowedChannelIds,
   onAllowedChannelIdsChange,
+  showAllowedChannelIds,
   replyInThread,
   onReplyInThreadChange,
+  showReplyInThread,
 }: IntegrationCardProps & {
   botToken: string;
   onBotTokenChange: (value: string) => void;
   botTokenPlaceholder: string;
   allowedGuildIds: string;
   onAllowedGuildIdsChange: (value: string) => void;
+  showAllowedGuildIds?: boolean;
   allowedChannelIds: string;
   onAllowedChannelIdsChange: (value: string) => void;
+  showAllowedChannelIds?: boolean;
   replyInThread: boolean;
   onReplyInThreadChange: (value: boolean) => void;
+  showReplyInThread?: boolean;
 }) {
   return (
     <IntegrationSettingsCard
@@ -276,6 +298,7 @@ export function DiscordIntegrationCard({
         />
       </LabeledField>
 
+      {showAllowedGuildIds !== false ? (
       <LabeledField label="Allowed server IDs">
         <Textarea
           value={allowedGuildIds}
@@ -284,7 +307,9 @@ export function DiscordIntegrationCard({
           placeholder="123456789012345678"
         />
       </LabeledField>
+      ) : null}
 
+      {showAllowedChannelIds !== false ? (
       <LabeledField label="Allowed channel IDs">
         <Textarea
           value={allowedChannelIds}
@@ -293,7 +318,9 @@ export function DiscordIntegrationCard({
           placeholder="123456789012345678"
         />
       </LabeledField>
+      ) : null}
 
+      {showReplyInThread !== false ? (
       <ChannelBehaviorToggle
         title="Reply in thread"
         description="Send Discord replies as message replies."
@@ -301,6 +328,7 @@ export function DiscordIntegrationCard({
         checked={replyInThread}
         onCheckedChange={onReplyInThreadChange}
       />
+      ) : null}
     </IntegrationSettingsCard>
   );
 }

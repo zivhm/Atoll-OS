@@ -199,7 +199,8 @@ export function registerRuntimeInstancesRoutes(app: FastifyInstance, deps: Runti
           image: resolveRuntimeImageForType({
             runtimeType: runtimeInstance.runtimeType,
             zeroclawImage: config.runtimeImage,
-            openclawImage: config.runtimeOpenclawImage
+            openclawImage: config.runtimeOpenclawImage,
+            hermesImage: config.runtimeHermesImage
           }),
           network: runtimeInstance.networkName,
           containerName: runtimeInstance.containerName
@@ -400,7 +401,8 @@ export function registerRuntimeInstancesRoutes(app: FastifyInstance, deps: Runti
         image: resolveRuntimeImageForType({
           runtimeType: runtimeInstance.runtimeType,
           zeroclawImage: config.runtimeImage,
-          openclawImage: config.runtimeOpenclawImage
+          openclawImage: config.runtimeOpenclawImage,
+          hermesImage: config.runtimeHermesImage
         }),
         network: runtimeInstance.networkName,
         containerName: runtimeInstance.containerName

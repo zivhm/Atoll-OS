@@ -2,10 +2,18 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { getAgentPresetById } from "../src/agent-presets.js";
-import { buildOpenClawConfigJson, buildWorkspaceSeedFiles } from "../src/runtime.js";
 import {
+  buildHermesConfigYaml,
+  buildHermesEnvFile,
+  buildOpenClawConfigJson,
+  buildWorkspaceSeedFiles
+} from "../src/runtime.js";
+import {
+  buildRuntimeCatalog,
   getRuntimeConnector,
   getRuntimeDescriptor,
+  getRuntimeTypes,
+  normalizeRuntimeType,
   resolveRuntimeHealthPath,
   resolveRuntimeEnvironment,
   resolveRuntimeLaunchArgs
@@ -244,6 +252,86 @@ test("buildOpenClawConfigJson opens discord group policy when guild/channel allo
   assert.equal(payload.channels?.discord?.guilds, undefined);
 });
 
+test("buildHermes config output preserves Atoll workspace and API server settings", () => {
+  const configYaml = buildHermesConfigYaml({
+    llm: {
+      provider: "openrouter",
+      model: "openai/gpt-5.3-chat",
+      apiKey: "test-api-key"
+    },
+    telegram: {
+      enabled: true,
+      botToken: "telegram-token",
+      allowFrom: ["12345"],
+      replyInPrivate: true
+    },
+    slack: {
+      enabled: true,
+      botToken: "xoxb-bot",
+      allowedChannelIds: ["C123"],
+      allowedUserIds: ["U123"],
+      replyInThread: true
+    },
+    discord: {
+      enabled: true,
+      botToken: "discord-token",
+      allowedGuildIds: ["G123"],
+      allowedChannelIds: ["D123"],
+      replyInThread: true,
+      requireMention: true
+    },
+    gatewayPort: 42617,
+    gatewayAuthToken: "bearer-token"
+  });
+  const envFile = buildHermesEnvFile({
+    llm: {
+      provider: "openrouter",
+      model: "openai/gpt-5.3-chat",
+      apiKey: "test-api-key"
+    },
+    telegram: {
+      enabled: true,
+      botToken: "telegram-token",
+      allowFrom: ["12345"],
+      replyInPrivate: true
+    },
+    slack: {
+      enabled: true,
+      botToken: "xoxb-bot",
+      appToken: "xapp-app",
+      allowedChannelIds: ["C123"],
+      allowedUserIds: ["U123"],
+      replyInThread: true
+    },
+    discord: {
+      enabled: true,
+      botToken: "discord-token",
+      allowedGuildIds: ["G123"],
+      allowedChannelIds: ["D123"],
+      replyInThread: true,
+      requireMention: true
+    },
+    gatewayPort: 42617,
+    gatewayAuthToken: "bearer-token"
+  });
+
+  assert.match(configYaml, /model:\s*"openrouter\/openai\/gpt-5\.3-chat"/u);
+  assert.match(configYaml, /workspace:\s*"\/home\/hermes\/\.hermes\/atoll\/workspace"/u);
+  assert.match(configYaml, /api_server:/u);
+  assert.match(configYaml, /enabled:\s*true/u);
+  assert.match(configYaml, /port:\s*42617/u);
+  assert.match(configYaml, /telegram:/u);
+  assert.match(configYaml, /slack:/u);
+  assert.match(configYaml, /discord:/u);
+
+  assert.match(envFile, /^OPENROUTER_API_KEY=test-api-key/mu);
+  assert.match(envFile, /^API_SERVER_KEY=bearer-token/mu);
+  assert.match(envFile, /^TELEGRAM_BOT_TOKEN=telegram-token/mu);
+  assert.match(envFile, /^SLACK_BOT_TOKEN=xoxb-bot/mu);
+  assert.match(envFile, /^SLACK_APP_TOKEN=xapp-app/mu);
+  assert.match(envFile, /^DISCORD_BOT_TOKEN=discord-token/mu);
+});
+
 test("workspace seed files include first-contact onboarding protocol", () => {
   const seeded = buildWorkspaceSeedFiles({
     workspaceName: "Ops Workspace",
@@ -284,6 +372,7 @@ test("business identity presets preserve the onboarding placeholder and generic 
 test("runtime descriptors expose mount, config, and workspace paths per runtime", () => {
   const openclaw = getRuntimeDescriptor("openclaw");
   const zeroclaw = getRuntimeDescriptor("zeroclaw");
+  const hermes = getRuntimeDescriptor("hermes");
 
   assert.equal(openclaw.mountPath, "/home/node/.openclaw");
   assert.equal(openclaw.configPath, "/openclaw-data/openclaw.json");
@@ -292,6 +381,10 @@ test("runtime descriptors expose mount, config, and workspace paths per runtime"
   assert.equal(zeroclaw.mountPath, "/zeroclaw-data");
   assert.equal(zeroclaw.configPath, "/zeroclaw-data/.zeroclaw/config.toml");
   assert.equal(zeroclaw.workspaceDir, "/zeroclaw-data/workspace");
+
+  assert.equal(hermes.mountPath, "/home/hermes/.hermes");
+  assert.equal(hermes.configPath, "/hermes-data/config.yaml");
+  assert.equal(hermes.workspaceDir, "/hermes-data/atoll/workspace");
 });
 
 test("runtime launch args resolve from descriptor metadata", () => {
@@ -312,6 +405,15 @@ test("runtime launch args resolve from descriptor metadata", () => {
     }),
     ["zeroclaw:test", "gateway", "--host", "0.0.0.0", "--port", "42617"]
   );
+
+  assert.deepEqual(
+    resolveRuntimeLaunchArgs("hermes", {
+      image: "hermes:test",
+      gatewayPort: 42617,
+      processMode: "daemon"
+    }),
+    ["hermes:test", "hermes", "gateway", "--host", "0.0.0.0", "--port", "42617"]
+  );
 });
 
 test("runtime environment adds deprecation suppression only for openclaw", () => {
@@ -319,6 +421,9 @@ test("runtime environment adds deprecation suppression only for openclaw", () =>
     NODE_OPTIONS: "--no-deprecation"
   });
   assert.deepEqual(resolveRuntimeEnvironment("zeroclaw"), {});
+  assert.deepEqual(resolveRuntimeEnvironment("hermes"), {
+    HERMES_CONFIG_DIR: "/home/hermes/.hermes"
+  });
 });
 
 test("runtime health metadata stays connector-driven", () => {
@@ -327,6 +432,14 @@ test("runtime health metadata stays connector-driven", () => {
 
   assert.equal(getRuntimeConnector("zeroclaw").healthMode, "http");
   assert.equal(resolveRuntimeHealthPath("zeroclaw"), "/health");
+
+  assert.equal(getRuntimeConnector("hermes").healthMode, "http");
+  assert.equal(resolveRuntimeHealthPath("hermes"), "/health");
+  assert.equal(getRuntimeConnector("openclaw").chatTransport, "openclaw-gateway");
+  assert.equal(getRuntimeConnector("zeroclaw").chatTransport, "http-message");
+  assert.equal(getRuntimeConnector("zeroclaw").chatEndpoint, "/webhook");
+  assert.equal(getRuntimeConnector("hermes").chatTransport, "openai-chat-completions");
+  assert.equal(getRuntimeConnector("hermes").chatEndpoint, "/v1/chat/completions");
 });
 
 test("runtime connectors default to the configured published images", () => {
@@ -335,4 +448,56 @@ test("runtime connectors default to the configured published images", () => {
     getRuntimeConnector("zeroclaw").defaultImage,
     "zivhm/zeroclaw-runtime"
   );
+  assert.equal(getRuntimeConnector("hermes").defaultImage, "nousresearch/hermes-agent");
+});
+
+test("runtime registry exposes all supported managed runtime types", () => {
+  assert.deepEqual(getRuntimeTypes(), ["openclaw", "zeroclaw", "hermes"]);
+});
+
+test("runtime normalization preserves supported types and falls back safely", () => {
+  assert.equal(normalizeRuntimeType("hermes"), "hermes");
+  assert.equal(normalizeRuntimeType("unknown"), "openclaw");
+  assert.equal(normalizeRuntimeType("unknown", "hermes"), "hermes");
+});
+
+test("runtime capabilities are connector-driven for slack and discord support", () => {
+  const openclaw = getRuntimeConnector("openclaw");
+  const zeroclaw = getRuntimeConnector("zeroclaw");
+  const hermes = getRuntimeConnector("hermes");
+
+  assert.equal(openclaw.capabilities.slackBotToken, true);
+  assert.equal(openclaw.capabilities.slackAppToken, true);
+  assert.equal(openclaw.capabilities.discordBotToken, true);
+  assert.equal(openclaw.capabilities.discordAllowedGuildIds, true);
+  assert.equal(openclaw.capabilities.discordAllowedChannelIds, true);
+
+  assert.equal(zeroclaw.capabilities.slackBotToken, false);
+  assert.equal(zeroclaw.capabilities.slackAppToken, false);
+  assert.equal(zeroclaw.capabilities.discordBotToken, false);
+
+  assert.equal(hermes.capabilities.slackBotToken, true);
+  assert.equal(hermes.capabilities.slackAppToken, false);
+  assert.equal(hermes.capabilities.discordBotToken, true);
+});
+
+test("runtime catalog includes hermes and resolves runtime-specific image overrides", () => {
+  const catalog = buildRuntimeCatalog({
+    runtimeTypes: ["openclaw", "zeroclaw", "hermes"],
+    runtimeImages: {
+      openclaw: "",
+      zeroclaw: "",
+      hermes: "hermes:custom"
+    },
+    runtimeGatewayPort: 42617,
+    runtimeRequirePairing: true,
+    runtimeAllowPublicBind: false
+  });
+
+  const hermes = catalog.find((item) => item.id === "hermes");
+  assert.ok(hermes);
+  assert.equal(hermes.resolvedImage, "hermes:custom");
+  assert.equal(hermes.defaultGatewayPort, 42617);
+  assert.equal(hermes.capabilities.chatAction, true);
+  assert.equal(hermes.capabilities.slackBotToken, true);
 });

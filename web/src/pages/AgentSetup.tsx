@@ -319,25 +319,50 @@ export default function AgentSetup() {
         ...(form.configureIntegrations && selectedRuntime.capabilities.telegramReplyInPrivate
           ? { telegramReplyInPrivate: form.telegramReplyInPrivate }
           : {}),
-        slackEnabled: form.configureIntegrations ? form.slackEnabled : false,
-        slackBotToken: form.configureIntegrations ? form.slackBotToken || undefined : undefined,
-        slackAppToken: form.configureIntegrations ? form.slackAppToken || undefined : undefined,
-        slackAllowedChannelIds: form.configureIntegrations
+        slackEnabled:
+          form.configureIntegrations && supportsSlackChannelControls(selectedRuntime)
+            ? form.slackEnabled
+            : false,
+        slackBotToken:
+          form.configureIntegrations && selectedRuntime.capabilities.slackBotToken
+            ? form.slackBotToken || undefined
+            : undefined,
+        slackAppToken:
+          form.configureIntegrations && selectedRuntime.capabilities.slackAppToken
+            ? form.slackAppToken || undefined
+            : undefined,
+        slackAllowedChannelIds:
+          form.configureIntegrations && selectedRuntime.capabilities.slackAllowedChannelIds
           ? parseIntegrationIdListInput(form.slackAllowedChannelIds)
           : undefined,
-        slackAllowedUserIds: form.configureIntegrations
+        slackAllowedUserIds:
+          form.configureIntegrations && selectedRuntime.capabilities.slackAllowedUserIds
           ? parseIntegrationIdListInput(form.slackAllowedUserIds)
           : undefined,
-        slackReplyInThread: form.configureIntegrations ? form.slackReplyInThread : undefined,
-        discordEnabled: form.configureIntegrations ? form.discordEnabled : false,
-        discordBotToken: form.configureIntegrations ? form.discordBotToken || undefined : undefined,
-        discordAllowedGuildIds: form.configureIntegrations
+        slackReplyInThread:
+          form.configureIntegrations && selectedRuntime.capabilities.slackReplyInThread
+            ? form.slackReplyInThread
+            : undefined,
+        discordEnabled:
+          form.configureIntegrations && supportsDiscordChannelControls(selectedRuntime)
+            ? form.discordEnabled
+            : false,
+        discordBotToken:
+          form.configureIntegrations && selectedRuntime.capabilities.discordBotToken
+            ? form.discordBotToken || undefined
+            : undefined,
+        discordAllowedGuildIds:
+          form.configureIntegrations && selectedRuntime.capabilities.discordAllowedGuildIds
           ? parseIntegrationIdListInput(form.discordAllowedGuildIds)
           : undefined,
-        discordAllowedChannelIds: form.configureIntegrations
+        discordAllowedChannelIds:
+          form.configureIntegrations && selectedRuntime.capabilities.discordAllowedChannelIds
           ? parseIntegrationIdListInput(form.discordAllowedChannelIds)
           : undefined,
-        discordReplyInThread: form.configureIntegrations ? form.discordReplyInThread : undefined,
+        discordReplyInThread:
+          form.configureIntegrations && selectedRuntime.capabilities.discordReplyInThread
+            ? form.discordReplyInThread
+            : undefined,
         dailyMessageLimit: parseLimitString(form.dailyMessageLimit),
         dailyTokenLimit: parseLimitString(form.dailyTokenLimit),
         monthlySpendLimitUsd: parseLimitString(form.monthlySpendLimitUsd),
@@ -402,6 +427,8 @@ export default function AgentSetup() {
       : `${modelCatalogItems.length} model suggestions available.`;
   const telegramAllowList = parseTelegramAllowListInput(form.telegramAllowFrom);
   const supportsTelegram = selectedRuntime ? supportsTelegramChannelControls(selectedRuntime) : false;
+  const supportsSlack = selectedRuntime ? supportsSlackChannelControls(selectedRuntime) : false;
+  const supportsDiscord = selectedRuntime ? supportsDiscordChannelControls(selectedRuntime) : false;
   const closeSetupModal = () => navigate("/dashboard");
 
   return (
@@ -886,6 +913,7 @@ export default function AgentSetup() {
                       />
                     ) : null}
 
+                    {supportsSlack ? (
                     <SlackIntegrationCard
                       enabled={form.slackEnabled}
                       onEnabledChange={(value) =>
@@ -914,6 +942,7 @@ export default function AgentSetup() {
                         }))
                       }
                       appTokenPlaceholder="xapp-..."
+                      showAppToken={selectedRuntime.capabilities.slackAppToken}
                       allowedChannelIds={form.slackAllowedChannelIds}
                       onAllowedChannelIdsChange={(value) =>
                         setForm((current) => ({
@@ -921,6 +950,7 @@ export default function AgentSetup() {
                           slackAllowedChannelIds: value,
                         }))
                       }
+                      showAllowedChannelIds={selectedRuntime.capabilities.slackAllowedChannelIds}
                       allowedUserIds={form.slackAllowedUserIds}
                       onAllowedUserIdsChange={(value) =>
                         setForm((current) => ({
@@ -928,6 +958,7 @@ export default function AgentSetup() {
                           slackAllowedUserIds: value,
                         }))
                       }
+                      showAllowedUserIds={selectedRuntime.capabilities.slackAllowedUserIds}
                       replyInThread={form.slackReplyInThread}
                       onReplyInThreadChange={(checked) =>
                         setForm((current) => ({
@@ -935,8 +966,11 @@ export default function AgentSetup() {
                           slackReplyInThread: checked,
                         }))
                       }
+                      showReplyInThread={selectedRuntime.capabilities.slackReplyInThread}
                     />
+                    ) : null}
 
+                    {supportsDiscord ? (
                     <DiscordIntegrationCard
                       enabled={form.discordEnabled}
                       onEnabledChange={(value) =>
@@ -958,6 +992,7 @@ export default function AgentSetup() {
                           discordAllowedGuildIds: value,
                         }))
                       }
+                      showAllowedGuildIds={selectedRuntime.capabilities.discordAllowedGuildIds}
                       allowedChannelIds={form.discordAllowedChannelIds}
                       onAllowedChannelIdsChange={(value) =>
                         setForm((current) => ({
@@ -965,6 +1000,7 @@ export default function AgentSetup() {
                           discordAllowedChannelIds: value,
                         }))
                       }
+                      showAllowedChannelIds={selectedRuntime.capabilities.discordAllowedChannelIds}
                       replyInThread={form.discordReplyInThread}
                       onReplyInThreadChange={(checked) =>
                         setForm((current) => ({
@@ -972,7 +1008,9 @@ export default function AgentSetup() {
                           discordReplyInThread: checked,
                         }))
                       }
+                      showReplyInThread={selectedRuntime.capabilities.discordReplyInThread}
                     />
+                    ) : null}
                   </div>
                 )}
               </div>
@@ -1186,10 +1224,20 @@ function validateStep(
     if (supportsTelegramChannelControls(runtime) && form.telegramEnabled && runtime.capabilities.telegramToken && !form.telegramBotToken.trim()) {
       return false;
     }
-    if (form.slackEnabled && (!form.slackBotToken.trim() || !form.slackAppToken.trim())) {
+    if (
+      supportsSlackChannelControls(runtime) &&
+      form.slackEnabled &&
+      ((runtime.capabilities.slackBotToken && !form.slackBotToken.trim()) ||
+        (runtime.capabilities.slackAppToken && !form.slackAppToken.trim()))
+    ) {
       return false;
     }
-    if (form.discordEnabled && !form.discordBotToken.trim()) {
+    if (
+      supportsDiscordChannelControls(runtime) &&
+      form.discordEnabled &&
+      runtime.capabilities.discordBotToken &&
+      !form.discordBotToken.trim()
+    ) {
       return false;
     }
     return true;
@@ -1211,6 +1259,17 @@ function applyRuntimeSelection(
     telegramReplyInPrivate: runtime.capabilities.telegramReplyInPrivate
       ? current.telegramReplyInPrivate
       : false,
+    slackEnabled: supportsSlackChannelControls(runtime) ? current.slackEnabled : false,
+    slackBotToken: runtime.capabilities.slackBotToken ? current.slackBotToken : "",
+    slackAppToken: runtime.capabilities.slackAppToken ? current.slackAppToken : "",
+    slackAllowedChannelIds: runtime.capabilities.slackAllowedChannelIds ? current.slackAllowedChannelIds : "",
+    slackAllowedUserIds: runtime.capabilities.slackAllowedUserIds ? current.slackAllowedUserIds : "",
+    slackReplyInThread: runtime.capabilities.slackReplyInThread ? current.slackReplyInThread : false,
+    discordEnabled: supportsDiscordChannelControls(runtime) ? current.discordEnabled : false,
+    discordBotToken: runtime.capabilities.discordBotToken ? current.discordBotToken : "",
+    discordAllowedGuildIds: runtime.capabilities.discordAllowedGuildIds ? current.discordAllowedGuildIds : "",
+    discordAllowedChannelIds: runtime.capabilities.discordAllowedChannelIds ? current.discordAllowedChannelIds : "",
+    discordReplyInThread: runtime.capabilities.discordReplyInThread ? current.discordReplyInThread : false,
     runtimeConfig: mergeRuntimeConfigState(current.runtimeConfig, runtime.runtimeConfigFields),
   };
 }
@@ -1220,6 +1279,25 @@ function supportsTelegramChannelControls(runtime: RuntimeCatalogItem): boolean {
     runtime.capabilities.telegramToken ||
       runtime.capabilities.telegramAllowFrom ||
       runtime.capabilities.telegramReplyInPrivate
+  );
+}
+
+function supportsSlackChannelControls(runtime: RuntimeCatalogItem): boolean {
+  return Boolean(
+    runtime.capabilities.slackBotToken ||
+      runtime.capabilities.slackAppToken ||
+      runtime.capabilities.slackAllowedChannelIds ||
+      runtime.capabilities.slackAllowedUserIds ||
+      runtime.capabilities.slackReplyInThread
+  );
+}
+
+function supportsDiscordChannelControls(runtime: RuntimeCatalogItem): boolean {
+  return Boolean(
+    runtime.capabilities.discordBotToken ||
+      runtime.capabilities.discordAllowedGuildIds ||
+      runtime.capabilities.discordAllowedChannelIds ||
+      runtime.capabilities.discordReplyInThread
   );
 }
 
@@ -1317,8 +1395,12 @@ function buildConnectionSummary(runtime: RuntimeCatalogItem | undefined, form: P
   if (runtime && supportsTelegramChannelControls(runtime)) {
     parts.push(`Telegram ${form.telegramEnabled ? "on" : "off"}`);
   }
-  parts.push(`Slack ${form.slackEnabled ? "on" : "off"}`);
-  parts.push(`Discord ${form.discordEnabled ? "on" : "off"}`);
+  if (runtime && supportsSlackChannelControls(runtime)) {
+    parts.push(`Slack ${form.slackEnabled ? "on" : "off"}`);
+  }
+  if (runtime && supportsDiscordChannelControls(runtime)) {
+    parts.push(`Discord ${form.discordEnabled ? "on" : "off"}`);
+  }
   return parts.join(" · ");
 }
 

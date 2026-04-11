@@ -363,7 +363,8 @@ async function sendRuntimeChatMessage(input: {
   requestId?: string;
   token?: string;
 }): Promise<RuntimeChatAdapterResponse> {
-  if (input.runtimeInstance.runtimeType === "openclaw") {
+  const connector = getRuntimeConnector(input.runtimeInstance.runtimeType);
+  if (connector.chatTransport === "openclaw-gateway") {
     return sendOpenClawChatMessage(input);
   }
   return sendHttpRuntimeChatMessage(input);
@@ -539,6 +540,7 @@ async function sendHttpRuntimeChatMessage(input: {
   message: string;
   token?: string;
 }): Promise<RuntimeChatAdapterResponse> {
+  const connector = getRuntimeConnector(input.runtimeInstance.runtimeType);
   const runtimeBaseUrl = await resolveRuntimeHttpBaseUrl({
     runtimeInstance: input.runtimeInstance,
     runtimeProvider: input.runtimeProvider,
@@ -554,17 +556,29 @@ async function sendHttpRuntimeChatMessage(input: {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
   };
-  if (input.token && input.runtimeInstance.runtimeType === "zeroclaw" && !input.runtimeInstance.requirePairing) {
+  if (
+    input.token &&
+    connector.authTransport === "webhook-secret" &&
+    !input.runtimeInstance.requirePairing
+  ) {
     headers["X-Webhook-Secret"] = input.token;
   } else if (input.token) {
     headers.Authorization = `Bearer ${input.token}`;
   }
 
-  const endpoint = resolveRuntimeChatEndpoint(input.runtimeInstance.runtimeType);
+  const endpoint = connector.chatEndpoint;
+  if (!endpoint) {
+    throw new RuntimeChatHttpError(
+      501,
+      `Chat endpoint is not available for ${input.runtimeInstance.runtimeType} runtimes.`,
+    );
+  }
+
+  const body = buildRuntimeChatRequestBody(input.runtimeInstance, input.message);
   const response = await fetch(`${runtimeBaseUrl}${endpoint}`, {
     method: "POST",
     headers,
-    body: JSON.stringify({ message: input.message }),
+    body: JSON.stringify(body),
     signal: resolveTimeoutSignal(input.config.runtimeHttpTimeoutMs),
   });
 
@@ -580,7 +594,10 @@ async function sendHttpRuntimeChatMessage(input: {
   return {
     resolvedBaseUrl: runtimeBaseUrl,
     raw,
-    assistantText: normalizeRuntimeChatAssistantText(raw),
+    assistantText:
+      connector.chatTransport === "openai-chat-completions"
+        ? normalizeOpenAiChatAssistantText(raw)
+        : normalizeRuntimeChatAssistantText(raw),
   };
 }
 
@@ -720,11 +737,22 @@ async function sendOpenClawChatMessage(input: {
   }
 }
 
-function resolveRuntimeChatEndpoint(runtimeType: RuntimeType): string {
-  if (runtimeType === "zeroclaw") {
-    return "/webhook";
+function buildRuntimeChatRequestBody(runtimeInstance: RuntimeInstance, message: string): Record<string, unknown> {
+  const connector = getRuntimeConnector(runtimeInstance.runtimeType);
+  if (connector.chatTransport === "openai-chat-completions") {
+    return {
+      model: runtimeInstance.llmModel,
+      stream: false,
+      messages: [
+        {
+          role: "user",
+          content: message
+        }
+      ]
+    };
   }
-  return "/chat";
+
+  return { message };
 }
 
 async function waitForRuntimeHealthReady(input: {
@@ -825,6 +853,19 @@ function normalizeRuntimeChatAssistantText(payload: Record<string, unknown> | nu
   return "Runtime completed without a text response.";
 }
 
+function normalizeOpenAiChatAssistantText(payload: Record<string, unknown> | null): string {
+  const choices = Array.isArray(payload?.choices) ? payload.choices : [];
+  for (const choice of choices) {
+    const message = toRecord(choice)?.message;
+    const direct = pickString(toRecord(message)?.content);
+    if (direct) {
+      return direct;
+    }
+  }
+
+  return normalizeRuntimeChatAssistantText(payload);
+}
+
 function extractOpenClawAssistantText(message: unknown): string {
   const record = toRecord(message);
   const direct = pickString(record?.text) ?? extractTextContent(record?.content);
@@ -883,7 +924,7 @@ function pickString(value: unknown): string | undefined {
 }
 
 function supportsManagedRuntimeChatToken(runtimeType: RuntimeType): boolean {
-  return runtimeType === "openclaw" || runtimeType === "zeroclaw";
+  return runtimeType === "openclaw" || runtimeType === "zeroclaw" || runtimeType === "hermes";
 }
 
 function buildRuntimeAwareMessage(runtimeInstance: RuntimeInstance, userMessage: string): string {

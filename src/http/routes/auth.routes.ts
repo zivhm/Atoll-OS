@@ -8,6 +8,7 @@ type AuthConfig = {
   corsAllowedOrigins: string[];
   runtimeImage: string;
   runtimeOpenclawImage: string;
+  runtimeHermesImage: string;
   supportedRuntimeTypes: RuntimeType[];
   defaultRuntimeType: RuntimeType;
   runtimeCatalog: RuntimeCatalogItem[];
@@ -60,6 +61,7 @@ export function registerAuthRoutes(
       containerCli: process.env.CONTAINER_CLI?.trim() || "docker",
       image: config.runtimeImage,
       openclawImage: config.runtimeOpenclawImage,
+      hermesImage: config.runtimeHermesImage,
       supportedRuntimeTypes: config.supportedRuntimeTypes,
       defaultRuntimeType: config.defaultRuntimeType,
       catalog: config.runtimeCatalog,
