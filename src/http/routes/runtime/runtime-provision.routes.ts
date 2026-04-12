@@ -185,6 +185,7 @@ export function registerRuntimeProvisionRoutes(app: FastifyInstance, deps: Runti
         slackReplyInThread: input.slackReplyInThread,
         discordEnabled: input.discordEnabled,
         discordBotToken: input.discordBotToken,
+        discordAllowedUserIds: input.discordAllowedUserIds,
         discordAllowedGuildIds: input.discordAllowedGuildIds,
         discordAllowedChannelIds: input.discordAllowedChannelIds,
         discordReplyInThread: input.discordReplyInThread,

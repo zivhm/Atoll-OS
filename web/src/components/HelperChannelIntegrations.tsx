@@ -251,6 +251,9 @@ export function DiscordIntegrationCard({
   botToken,
   onBotTokenChange,
   botTokenPlaceholder,
+  allowedUserIds,
+  onAllowedUserIdsChange,
+  showAllowedUserIds,
   allowedGuildIds,
   onAllowedGuildIdsChange,
   showAllowedGuildIds,
@@ -260,10 +263,18 @@ export function DiscordIntegrationCard({
   replyInThread,
   onReplyInThreadChange,
   showReplyInThread,
+  replyBehaviorTitle,
+  replyBehaviorDescription,
+  requireMention,
+  onRequireMentionChange,
+  showRequireMention,
 }: IntegrationCardProps & {
   botToken: string;
   onBotTokenChange: (value: string) => void;
   botTokenPlaceholder: string;
+  allowedUserIds: string;
+  onAllowedUserIdsChange: (value: string) => void;
+  showAllowedUserIds?: boolean;
   allowedGuildIds: string;
   onAllowedGuildIdsChange: (value: string) => void;
   showAllowedGuildIds?: boolean;
@@ -273,6 +284,11 @@ export function DiscordIntegrationCard({
   replyInThread: boolean;
   onReplyInThreadChange: (value: boolean) => void;
   showReplyInThread?: boolean;
+  replyBehaviorTitle?: string;
+  replyBehaviorDescription?: string;
+  requireMention?: boolean;
+  onRequireMentionChange?: (value: boolean) => void;
+  showRequireMention?: boolean;
 }) {
   return (
     <IntegrationSettingsCard
@@ -298,6 +314,17 @@ export function DiscordIntegrationCard({
         />
       </LabeledField>
 
+      {showAllowedUserIds ? (
+      <LabeledField label="Allowed user IDs">
+        <Textarea
+          value={allowedUserIds}
+          onChange={(event) => onAllowedUserIdsChange(event.target.value)}
+          rows={3}
+          placeholder="123456789012345678"
+        />
+      </LabeledField>
+      ) : null}
+
       {showAllowedGuildIds !== false ? (
       <LabeledField label="Allowed server IDs">
         <Textarea
@@ -322,11 +349,21 @@ export function DiscordIntegrationCard({
 
       {showReplyInThread !== false ? (
       <ChannelBehaviorToggle
-        title="Reply in thread"
-        description="Send Discord replies as message replies."
+        title={replyBehaviorTitle ?? "Reply in thread"}
+        description={replyBehaviorDescription ?? "Send Discord replies as message replies."}
         ariaLabel="Reply in Discord thread"
         checked={replyInThread}
         onCheckedChange={onReplyInThreadChange}
+      />
+      ) : null}
+
+      {showRequireMention ? (
+      <ChannelBehaviorToggle
+        title="Require mention"
+        description="Only respond when the helper is explicitly mentioned."
+        ariaLabel="Require Discord mention"
+        checked={Boolean(requireMention)}
+        onCheckedChange={onRequireMentionChange}
       />
       ) : null}
     </IntegrationSettingsCard>

@@ -24,6 +24,7 @@ export type RuntimeConnectorCapabilities = {
   slackAllowedUserIds: boolean;
   slackReplyInThread: boolean;
   discordBotToken: boolean;
+  discordAllowedUserIds: boolean;
   discordAllowedGuildIds: boolean;
   discordAllowedChannelIds: boolean;
   discordReplyInThread: boolean;
@@ -110,6 +111,7 @@ const DEFAULT_CAPABILITIES: RuntimeConnectorCapabilities = {
   slackAllowedUserIds: false,
   slackReplyInThread: false,
   discordBotToken: false,
+  discordAllowedUserIds: false,
   discordAllowedGuildIds: false,
   discordAllowedChannelIds: false,
   discordReplyInThread: false,
@@ -155,6 +157,7 @@ const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
       slackAllowedUserIds: true,
       slackReplyInThread: true,
       discordBotToken: true,
+      discordAllowedUserIds: false,
       discordAllowedGuildIds: true,
       discordAllowedChannelIds: true,
       discordReplyInThread: true,
@@ -206,46 +209,15 @@ const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
       slackBotToken: true,
       slackAppToken: true,
       slackAllowedUserIds: true,
-      slackReplyInThread: true
+      slackReplyInThread: true,
+      discordBotToken: true,
+      discordAllowedUserIds: true,
+      discordAllowedGuildIds: false,
+      discordAllowedChannelIds: true,
+      discordReplyInThread: true,
+      discordRequireMention: true
     },
-    runtimeConfigFields: [
-      {
-        key: "discord_bot_token",
-        label: "Discord bot token",
-        kind: "string",
-        secret: true,
-        helperText: "Hermes-native Discord token. This is separate from the shared Discord integration model.",
-        placeholder: "discord bot token"
-      },
-      {
-        key: "discord_allowed_users",
-        label: "Discord allowed users",
-        kind: "string",
-        helperText: "Comma-separated Discord user IDs allowed to message this Hermes runtime.",
-        placeholder: "284102345871466496,198765432109876543"
-      },
-      {
-        key: "discord_allowed_channels",
-        label: "Discord allowed channels",
-        kind: "string",
-        helperText: "Optional comma-separated Discord channel IDs to restrict where Hermes responds.",
-        placeholder: "123456789012345678,987654321098765432"
-      },
-      {
-        key: "discord_require_mention",
-        label: "Discord require mention",
-        kind: "boolean",
-        helperText: "Require an @mention before Hermes responds in Discord server channels.",
-        defaultValue: true
-      },
-      {
-        key: "discord_auto_thread",
-        label: "Discord auto thread",
-        kind: "boolean",
-        helperText: "Create a fresh thread for each Discord @mention when supported by Hermes.",
-        defaultValue: true
-      }
-    ]
+    runtimeConfigFields: []
   }
 };
 

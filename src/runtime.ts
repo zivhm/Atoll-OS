@@ -54,6 +54,7 @@ export type RuntimeSlackConfig = {
 export type RuntimeDiscordConfig = {
   enabled: boolean;
   botToken?: string;
+  allowedUserIds?: string[];
   allowedGuildIds: string[];
   allowedChannelIds: string[];
   replyInThread: boolean;
@@ -1008,8 +1009,7 @@ export function buildHermesConfigYaml(input: {
   runtimeOptions?: Record<string, unknown>;
   runtimeSecrets?: Record<string, string>;
 }): string {
-  const discord = resolveRuntimeDiscordConfig(input.discord);
-  const hermesDiscord = resolveHermesDiscordRuntimeConfig(input.runtimeOptions, input.runtimeSecrets);
+  const hermesDiscord = resolveHermesDiscordConfig(resolveRuntimeDiscordConfig(input.discord));
   const modelReference = resolveHermesModelReference(input.llm.provider, input.llm.model);
   const modelProvider = resolveHermesProviderName(input.llm.provider);
   const lines = [
@@ -1035,27 +1035,20 @@ export function buildHermesConfigYaml(input: {
     );
   }
 
-  if (discord.enabled || hermesDiscord.enabled) {
+  if (hermesDiscord.enabled) {
     if (!input.slack.enabled) {
       lines.push("platforms:");
     }
     lines.push(
       "  discord:",
-      `    reply_to_mode: ${toYamlString(
-        (discord.enabled ? discord.replyInThread : hermesDiscord.autoThread) ? "first" : "off"
-      )}`,
+      `    reply_to_mode: ${toYamlString(hermesDiscord.autoThread ? "first" : "off")}`,
       "discord:",
-      `  require_mention: ${toYamlBoolean(
-        discord.enabled ? (discord.requireMention ?? true) : hermesDiscord.requireMention
-      )}`,
-      `  auto_thread: ${toYamlBoolean(discord.enabled ? discord.replyInThread : hermesDiscord.autoThread)}`
+      `  require_mention: ${toYamlBoolean(hermesDiscord.requireMention)}`,
+      `  auto_thread: ${toYamlBoolean(hermesDiscord.autoThread)}`
     );
-    const allowedChannels = discord.enabled
-      ? discord.allowedChannelIds
-      : hermesDiscord.allowedChannels;
-    if (allowedChannels.length > 0) {
+    if (hermesDiscord.allowedChannels.length > 0) {
       lines.push("  allowed_channels:");
-      for (const channelId of allowedChannels) {
+      for (const channelId of hermesDiscord.allowedChannels) {
         lines.push(`    - ${toYamlString(channelId)}`);
       }
     }
@@ -1075,7 +1068,7 @@ export function buildHermesEnvFile(input: {
   runtimeSecrets?: Record<string, string>;
 }): string {
   const providerApiKeyEnv = resolveProviderApiKeyEnvName(input.llm.provider);
-  const hermesDiscord = resolveHermesDiscordRuntimeConfig(input.runtimeOptions, input.runtimeSecrets);
+  const hermesDiscord = resolveHermesDiscordConfig(resolveRuntimeDiscordConfig(input.discord));
   const modelReference = resolveHermesModelReference(input.llm.provider, input.llm.model);
   const lines = [
     "API_SERVER_ENABLED=true",
@@ -1543,9 +1536,8 @@ function resolveHermesBaseUrlLine(provider: string): string[] {
   return [];
 }
 
-function resolveHermesDiscordRuntimeConfig(
-  runtimeOptions?: Record<string, unknown>,
-  runtimeSecrets?: Record<string, string>
+function resolveHermesDiscordConfig(
+  discord: RuntimeDiscordConfig
 ): {
   enabled: boolean;
   botToken?: string;
@@ -1554,30 +1546,16 @@ function resolveHermesDiscordRuntimeConfig(
   requireMention: boolean;
   autoThread: boolean;
 } {
-  const botToken = runtimeSecrets?.discord_bot_token?.trim() || undefined;
+  const botToken = discord.botToken?.trim() || undefined;
 
   return {
     enabled: Boolean(botToken),
     botToken,
-    allowedUsers: parseHermesIdList(runtimeOptions?.discord_allowed_users),
-    allowedChannels: parseHermesIdList(runtimeOptions?.discord_allowed_channels),
-    requireMention: parseHermesBoolean(runtimeOptions?.discord_require_mention, true),
-    autoThread: parseHermesBoolean(runtimeOptions?.discord_auto_thread, true)
+    allowedUsers: discord.allowedUserIds ?? [],
+    allowedChannels: discord.allowedChannelIds,
+    requireMention: discord.requireMention ?? true,
+    autoThread: discord.replyInThread
   };
-}
-
-function parseHermesIdList(value: unknown): string[] {
-  if (typeof value !== "string") {
-    return [];
-  }
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
-
-function parseHermesBoolean(value: unknown, fallback: boolean): boolean {
-  return typeof value === "boolean" ? value : fallback;
 }
 
 function resolveProviderApiKeyEnvName(provider: string): string | undefined {
@@ -1627,6 +1605,7 @@ function buildRuntimeIntegrationsSnapshotJson(input: {
         enabled: discord.enabled,
         transport: "native-gateway",
         hasBotToken: Boolean(discord.botToken?.trim()),
+        allowedUserIds: discord.allowedUserIds ?? [],
         allowedGuildIds: discord.allowedGuildIds,
         allowedChannelIds: discord.allowedChannelIds,
         replyInThread: discord.replyInThread,
@@ -1681,6 +1660,7 @@ function resolveRuntimeDiscordConfig(input?: RuntimeDiscordConfig): RuntimeDisco
   return {
     enabled: input?.enabled ?? false,
     botToken: input?.botToken,
+    allowedUserIds: input?.allowedUserIds ?? [],
     allowedGuildIds: input?.allowedGuildIds ?? [],
     allowedChannelIds: input?.allowedChannelIds ?? [],
     replyInThread: input?.replyInThread ?? true,

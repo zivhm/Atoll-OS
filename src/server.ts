@@ -808,6 +808,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       slackReplyInThread: boolean;
       discordEnabled: boolean;
       discordBotToken?: string;
+      discordAllowedUserIds: string[];
       discordAllowedGuildIds: string[];
       discordAllowedChannelIds: string[];
       discordReplyInThread: boolean;
@@ -866,6 +867,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       slackReplyInThread: input.slackReplyInThread,
       discordEnabled: input.discordEnabled,
       discordBotToken: input.discordBotToken,
+      discordAllowedUserIds: input.discordAllowedUserIds,
       discordAllowedGuildIds: input.discordAllowedGuildIds,
       discordAllowedChannelIds: input.discordAllowedChannelIds,
       discordReplyInThread: input.discordReplyInThread,
@@ -962,6 +964,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
             discord: {
               enabled: runtimeInstance.discordEnabled,
               botToken: runtimeInstance.discordBotToken,
+              allowedUserIds: runtimeInstance.discordAllowedUserIds,
               allowedGuildIds: runtimeInstance.discordAllowedGuildIds,
               allowedChannelIds: runtimeInstance.discordAllowedChannelIds,
               replyInThread: runtimeInstance.discordReplyInThread,
@@ -1117,6 +1120,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
       discord: {
         enabled: configuredRuntimeInstance.discordEnabled,
         botToken: configuredRuntimeInstance.discordBotToken,
+        allowedUserIds: configuredRuntimeInstance.discordAllowedUserIds,
         allowedGuildIds: configuredRuntimeInstance.discordAllowedGuildIds,
         allowedChannelIds: configuredRuntimeInstance.discordAllowedChannelIds,
         replyInThread: configuredRuntimeInstance.discordReplyInThread,
@@ -1232,6 +1236,7 @@ export async function buildApp(options: BuildAppOptions = {}) {
         | "slackReplyInThread"
         | "discordEnabled"
         | "discordBotToken"
+        | "discordAllowedUserIds"
         | "discordAllowedGuildIds"
         | "discordAllowedChannelIds"
         | "discordReplyInThread"

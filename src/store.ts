@@ -121,6 +121,7 @@ export type RuntimeInstance = {
   slackReplyInThread: boolean;
   discordEnabled: boolean;
   discordBotToken?: string;
+  discordAllowedUserIds: string[];
   discordAllowedGuildIds: string[];
   discordAllowedChannelIds: string[];
   discordReplyInThread: boolean;
@@ -256,6 +257,7 @@ export type CreateRuntimeInstanceInput = {
   slackReplyInThread?: boolean;
   discordEnabled?: boolean;
   discordBotToken?: string;
+  discordAllowedUserIds?: string[];
   discordAllowedGuildIds?: string[];
   discordAllowedChannelIds?: string[];
   discordReplyInThread?: boolean;
@@ -335,6 +337,7 @@ type UpdateRuntimePatch = Partial<
       | "slackReplyInThread"
       | "discordEnabled"
       | "discordBotToken"
+      | "discordAllowedUserIds"
       | "discordAllowedGuildIds"
       | "discordAllowedChannelIds"
       | "discordReplyInThread"
@@ -762,6 +765,7 @@ export function createStore(options: StoreOptions) {
       slackReplyInThread: input.slackReplyInThread ?? true,
       discordEnabled: input.discordEnabled ?? false,
       discordBotToken: normalizeOptionalString(input.discordBotToken),
+      discordAllowedUserIds: normalizeIdList(input.discordAllowedUserIds),
       discordAllowedGuildIds: normalizeIdList(input.discordAllowedGuildIds),
       discordAllowedChannelIds: normalizeIdList(input.discordAllowedChannelIds),
       discordReplyInThread: input.discordReplyInThread ?? true,
@@ -814,6 +818,9 @@ export function createStore(options: StoreOptions) {
       discordBotToken: has("discordBotToken")
         ? normalizeOptionalString(patch.discordBotToken)
         : current.discordBotToken,
+      discordAllowedUserIds: has("discordAllowedUserIds")
+        ? normalizeIdList(patch.discordAllowedUserIds)
+        : current.discordAllowedUserIds,
       discordAllowedGuildIds: has("discordAllowedGuildIds")
         ? normalizeIdList(patch.discordAllowedGuildIds)
         : current.discordAllowedGuildIds,
@@ -1130,6 +1137,9 @@ export function createStore(options: StoreOptions) {
         (serialized as Partial<RuntimeInstance>).slackReplyInThread ?? true,
       discordEnabled: Boolean((serialized as Partial<RuntimeInstance>).discordEnabled),
       discordBotToken: decryptSecret(serialized.discordBotToken),
+      discordAllowedUserIds: normalizeIdList(
+        (serialized as Partial<RuntimeInstance>).discordAllowedUserIds
+      ),
       discordAllowedGuildIds: normalizeIdList(
         (serialized as Partial<RuntimeInstance>).discordAllowedGuildIds
       ),

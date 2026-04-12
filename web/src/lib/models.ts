@@ -50,9 +50,11 @@ export interface ProvisionWizardState {
   slackReplyInThread: boolean;
   discordEnabled: boolean;
   discordBotToken: string;
+  discordAllowedUserIds: string;
   discordAllowedGuildIds: string;
   discordAllowedChannelIds: string;
   discordReplyInThread: boolean;
+  discordRequireMention: boolean;
   dailyMessageLimit: string;
   dailyTokenLimit: string;
   monthlySpendLimitUsd: string;
@@ -265,9 +267,11 @@ export function buildInitialProvisionWizardState(defaults?: {
     slackReplyInThread: true,
     discordEnabled: false,
     discordBotToken: "",
+    discordAllowedUserIds: "",
     discordAllowedGuildIds: "",
     discordAllowedChannelIds: "",
     discordReplyInThread: true,
+    discordRequireMention: true,
     dailyMessageLimit: "",
     dailyTokenLimit: "",
     monthlySpendLimitUsd: "",

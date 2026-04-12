@@ -351,6 +351,10 @@ export default function AgentSetup() {
           form.configureIntegrations && selectedRuntime.capabilities.discordBotToken
             ? form.discordBotToken || undefined
             : undefined,
+        discordAllowedUserIds:
+          form.configureIntegrations && selectedRuntime.capabilities.discordAllowedUserIds
+          ? parseIntegrationIdListInput(form.discordAllowedUserIds)
+          : undefined,
         discordAllowedGuildIds:
           form.configureIntegrations && selectedRuntime.capabilities.discordAllowedGuildIds
           ? parseIntegrationIdListInput(form.discordAllowedGuildIds)
@@ -362,6 +366,10 @@ export default function AgentSetup() {
         discordReplyInThread:
           form.configureIntegrations && selectedRuntime.capabilities.discordReplyInThread
             ? form.discordReplyInThread
+            : undefined,
+        discordRequireMention:
+          form.configureIntegrations && selectedRuntime.capabilities.discordRequireMention
+            ? form.discordRequireMention
             : undefined,
         dailyMessageLimit: parseLimitString(form.dailyMessageLimit),
         dailyTokenLimit: parseLimitString(form.dailyTokenLimit),
@@ -985,6 +993,14 @@ export default function AgentSetup() {
                         }))
                       }
                       botTokenPlaceholder="Discord bot token"
+                      allowedUserIds={form.discordAllowedUserIds}
+                      onAllowedUserIdsChange={(value) =>
+                        setForm((current) => ({
+                          ...current,
+                          discordAllowedUserIds: value,
+                        }))
+                      }
+                      showAllowedUserIds={selectedRuntime.capabilities.discordAllowedUserIds}
                       allowedGuildIds={form.discordAllowedGuildIds}
                       onAllowedGuildIdsChange={(value) =>
                         setForm((current) => ({
@@ -1009,6 +1025,26 @@ export default function AgentSetup() {
                         }))
                       }
                       showReplyInThread={selectedRuntime.capabilities.discordReplyInThread}
+                      replyBehaviorTitle={
+                        selectedRuntime.capabilities.discordAllowedUserIds &&
+                        !selectedRuntime.capabilities.discordAllowedGuildIds
+                          ? "Auto thread"
+                          : "Reply in thread"
+                      }
+                      replyBehaviorDescription={
+                        selectedRuntime.capabilities.discordAllowedUserIds &&
+                        !selectedRuntime.capabilities.discordAllowedGuildIds
+                          ? "Create a fresh thread when the helper is mentioned."
+                          : "Send Discord replies as message replies."
+                      }
+                      requireMention={form.discordRequireMention}
+                      onRequireMentionChange={(checked) =>
+                        setForm((current) => ({
+                          ...current,
+                          discordRequireMention: checked,
+                        }))
+                      }
+                      showRequireMention={selectedRuntime.capabilities.discordRequireMention}
                     />
                     ) : null}
                   </div>
@@ -1267,9 +1303,11 @@ function applyRuntimeSelection(
     slackReplyInThread: runtime.capabilities.slackReplyInThread ? current.slackReplyInThread : false,
     discordEnabled: supportsDiscordChannelControls(runtime) ? current.discordEnabled : false,
     discordBotToken: runtime.capabilities.discordBotToken ? current.discordBotToken : "",
+    discordAllowedUserIds: runtime.capabilities.discordAllowedUserIds ? current.discordAllowedUserIds : "",
     discordAllowedGuildIds: runtime.capabilities.discordAllowedGuildIds ? current.discordAllowedGuildIds : "",
     discordAllowedChannelIds: runtime.capabilities.discordAllowedChannelIds ? current.discordAllowedChannelIds : "",
     discordReplyInThread: runtime.capabilities.discordReplyInThread ? current.discordReplyInThread : false,
+    discordRequireMention: runtime.capabilities.discordRequireMention ? current.discordRequireMention : true,
     runtimeConfig: mergeRuntimeConfigState(current.runtimeConfig, runtime.runtimeConfigFields),
   };
 }
@@ -1295,9 +1333,11 @@ function supportsSlackChannelControls(runtime: RuntimeCatalogItem): boolean {
 function supportsDiscordChannelControls(runtime: RuntimeCatalogItem): boolean {
   return Boolean(
     runtime.capabilities.discordBotToken ||
+      runtime.capabilities.discordAllowedUserIds ||
       runtime.capabilities.discordAllowedGuildIds ||
       runtime.capabilities.discordAllowedChannelIds ||
-      runtime.capabilities.discordReplyInThread
+      runtime.capabilities.discordReplyInThread ||
+      runtime.capabilities.discordRequireMention
   );
 }
 

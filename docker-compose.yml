@@ -8,7 +8,7 @@ services:
     init: true
     restart: unless-stopped
     ports:
-      - "127.0.0.1:${PORT:-8450}:${PORT:-8450}"
+      - "0.0.0.0:${PORT:-8450}:${PORT:-8450}"
     environment:
       ATOLL_SECRETS_KEY: ${ATOLL_SECRETS_KEY:?Define ATOLL_SECRETS_KEY in your local .env before starting Docker Compose}
       HOST: 0.0.0.0

@@ -143,9 +143,11 @@ export default function AgentSettings() {
   const [slackReplyInThread, setSlackReplyInThread] = useState(true);
   const [discordEnabled, setDiscordEnabled] = useState(false);
   const [discordBotToken, setDiscordBotToken] = useState("");
+  const [discordAllowedUserIds, setDiscordAllowedUserIds] = useState("");
   const [discordAllowedGuildIds, setDiscordAllowedGuildIds] = useState("");
   const [discordAllowedChannelIds, setDiscordAllowedChannelIds] = useState("");
   const [discordReplyInThread, setDiscordReplyInThread] = useState(true);
+  const [discordRequireMention, setDiscordRequireMention] = useState(true);
   const [pairingCode, setPairingCode] = useState("");
   const [runtimeToken, setRuntimeToken] = useState("");
   const [webhookToken, setWebhookToken] = useState("");
@@ -247,9 +249,11 @@ export default function AgentSettings() {
     setSlackReplyInThread(detail.instance.slackReplyInThread);
     setDiscordEnabled(detail.instance.discordEnabled);
     setDiscordBotToken("");
+    setDiscordAllowedUserIds(detail.instance.discordAllowedUserIds.join(", "));
     setDiscordAllowedGuildIds(detail.instance.discordAllowedGuildIds.join(", "));
     setDiscordAllowedChannelIds(detail.instance.discordAllowedChannelIds.join(", "));
     setDiscordReplyInThread(detail.instance.discordReplyInThread);
+    setDiscordRequireMention(detail.instance.discordRequireMention);
     setRuntimeConfigValues(
       selectedRuntime
         ? buildRuntimeConfigFormState({
@@ -457,9 +461,11 @@ export default function AgentSettings() {
       return updateRuntimeDiscord(detail.instance.id, {
         enabled: discordEnabled,
         discordBotToken: discordBotToken || undefined,
+        discordAllowedUserIds: parseIntegrationIdListInput(discordAllowedUserIds),
         discordAllowedGuildIds: parseIntegrationIdListInput(discordAllowedGuildIds),
         discordAllowedChannelIds: parseIntegrationIdListInput(discordAllowedChannelIds),
         discordReplyInThread,
+        discordRequireMention,
       });
     },
     onSuccess: async (payload) => {
@@ -1210,12 +1216,33 @@ export default function AgentSettings() {
                     ? "Leave blank to keep the saved token"
                     : "Discord bot token"
                 }
+                allowedUserIds={discordAllowedUserIds}
+                onAllowedUserIdsChange={setDiscordAllowedUserIds}
+                showAllowedUserIds={selectedRuntime?.capabilities.discordAllowedUserIds}
                 allowedGuildIds={discordAllowedGuildIds}
                 onAllowedGuildIdsChange={setDiscordAllowedGuildIds}
+                showAllowedGuildIds={selectedRuntime?.capabilities.discordAllowedGuildIds}
                 allowedChannelIds={discordAllowedChannelIds}
                 onAllowedChannelIdsChange={setDiscordAllowedChannelIds}
+                showAllowedChannelIds={selectedRuntime?.capabilities.discordAllowedChannelIds}
                 replyInThread={discordReplyInThread}
                 onReplyInThreadChange={setDiscordReplyInThread}
+                showReplyInThread={selectedRuntime?.capabilities.discordReplyInThread}
+                replyBehaviorTitle={
+                  selectedRuntime?.capabilities.discordAllowedUserIds &&
+                  selectedRuntime?.capabilities.discordAllowedGuildIds !== true
+                    ? "Auto thread"
+                    : "Reply in thread"
+                }
+                replyBehaviorDescription={
+                  selectedRuntime?.capabilities.discordAllowedUserIds &&
+                  selectedRuntime?.capabilities.discordAllowedGuildIds !== true
+                    ? "Create a fresh thread when the helper is mentioned."
+                    : "Send Discord replies as message replies."
+                }
+                requireMention={discordRequireMention}
+                onRequireMentionChange={setDiscordRequireMention}
+                showRequireMention={selectedRuntime?.capabilities.discordRequireMention}
               />
             </div>
 

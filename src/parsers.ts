@@ -54,6 +54,7 @@ export function parseCreateRuntimeInstanceInput(
   slackReplyInThread: boolean;
   discordEnabled: boolean;
   discordBotToken?: string;
+  discordAllowedUserIds: string[];
   discordAllowedGuildIds: string[];
   discordAllowedChannelIds: string[];
   discordReplyInThread: boolean;
@@ -100,6 +101,7 @@ export function parseCreateRuntimeInstanceInput(
     slackReplyInThread?: unknown;
     discordEnabled?: unknown;
     discordBotToken?: unknown;
+    discordAllowedUserIds?: unknown;
     discordAllowedGuildIds?: unknown;
     discordAllowedChannelIds?: unknown;
     discordReplyInThread?: unknown;
@@ -172,6 +174,7 @@ export function parseCreateRuntimeInstanceInput(
   const slackReplyInThread = parseBooleanUnknown(body?.slackReplyInThread, true);
   const discordEnabled = parseBooleanUnknown(body?.discordEnabled, false);
   const discordBotToken = getOptionalTrimmedString(body?.discordBotToken);
+  const discordAllowedUserIds = parseIdListUnknown(body?.discordAllowedUserIds) ?? [];
   const discordAllowedGuildIds = parseIdListUnknown(body?.discordAllowedGuildIds) ?? [];
   const discordAllowedChannelIds = parseIdListUnknown(body?.discordAllowedChannelIds) ?? [];
   const discordReplyInThread = parseBooleanUnknown(body?.discordReplyInThread, true);
@@ -254,6 +257,7 @@ export function parseCreateRuntimeInstanceInput(
     slackReplyInThread,
     discordEnabled,
     discordBotToken,
+    discordAllowedUserIds,
     discordAllowedGuildIds,
     discordAllowedChannelIds,
     discordReplyInThread,
@@ -845,6 +849,7 @@ export function parseRuntimeDiscordSettingsInput(
 ): {
   enabled: boolean;
   botToken?: string;
+  allowedUserIds: string[];
   allowedGuildIds: string[];
   allowedChannelIds: string[];
   replyInThread: boolean;
@@ -854,6 +859,7 @@ export function parseRuntimeDiscordSettingsInput(
     enabled?: unknown;
     discordEnabled?: unknown;
     discordBotToken?: unknown;
+    discordAllowedUserIds?: unknown;
     discordAllowedGuildIds?: unknown;
     discordAllowedChannelIds?: unknown;
     discordReplyInThread?: unknown;
@@ -867,6 +873,8 @@ export function parseRuntimeDiscordSettingsInput(
   );
   const botToken =
     getOptionalTrimmedString(body?.discordBotToken) ?? runtimeInstance.discordBotToken;
+  const allowedUserIds =
+    parseIdListUnknown(body?.discordAllowedUserIds) ?? runtimeInstance.discordAllowedUserIds;
   const allowedGuildIds =
     parseIdListUnknown(body?.discordAllowedGuildIds) ?? runtimeInstance.discordAllowedGuildIds;
   const allowedChannelIds =
@@ -881,6 +889,7 @@ export function parseRuntimeDiscordSettingsInput(
   );
   const supportsDiscord =
     connector.capabilities.discordBotToken ||
+    connector.capabilities.discordAllowedUserIds ||
     connector.capabilities.discordAllowedGuildIds ||
     connector.capabilities.discordAllowedChannelIds ||
     connector.capabilities.discordReplyInThread;
@@ -896,6 +905,7 @@ export function parseRuntimeDiscordSettingsInput(
   return {
     enabled,
     botToken,
+    allowedUserIds,
     allowedGuildIds,
     allowedChannelIds,
     replyInThread,

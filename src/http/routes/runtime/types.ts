@@ -107,6 +107,7 @@ export type RuntimeRouteDeps = {
     slackReplyInThread: boolean;
     discordEnabled: boolean;
     discordBotToken?: string;
+    discordAllowedUserIds: string[];
     discordAllowedGuildIds: string[];
     discordAllowedChannelIds: string[];
     discordReplyInThread: boolean;
@@ -150,6 +151,7 @@ export type RuntimeRouteDeps = {
         | "slackReplyInThread"
         | "discordEnabled"
         | "discordBotToken"
+        | "discordAllowedUserIds"
         | "discordAllowedGuildIds"
         | "discordAllowedChannelIds"
         | "discordReplyInThread"

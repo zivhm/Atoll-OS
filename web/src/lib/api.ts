@@ -20,6 +20,7 @@ export interface RuntimeConnectorCapabilities {
   slackAllowedUserIds: boolean;
   slackReplyInThread: boolean;
   discordBotToken: boolean;
+  discordAllowedUserIds: boolean;
   discordAllowedGuildIds: boolean;
   discordAllowedChannelIds: boolean;
   discordReplyInThread: boolean;
@@ -214,9 +215,11 @@ export interface RuntimeInstance {
   slackAllowedUserIds: string[];
   slackReplyInThread: boolean;
   discordEnabled: boolean;
+  discordAllowedUserIds: string[];
   discordAllowedGuildIds: string[];
   discordAllowedChannelIds: string[];
   discordReplyInThread: boolean;
+  discordRequireMention: boolean;
   dailyMessageLimit?: number;
   dailyTokenLimit?: number;
   monthlySpendLimitUsd?: number;
@@ -490,9 +493,11 @@ export interface ProvisionJobCreateInput {
   slackReplyInThread?: boolean;
   discordEnabled?: boolean;
   discordBotToken?: string;
+  discordAllowedUserIds?: string[];
   discordAllowedGuildIds?: string[];
   discordAllowedChannelIds?: string[];
   discordReplyInThread?: boolean;
+  discordRequireMention?: boolean;
   dailyMessageLimit?: number;
   dailyTokenLimit?: number;
   monthlySpendLimitUsd?: number;
@@ -973,9 +978,11 @@ export async function updateRuntimeDiscord(
   input: {
     enabled: boolean;
     discordBotToken?: string;
+    discordAllowedUserIds?: string[];
     discordAllowedGuildIds?: string[];
     discordAllowedChannelIds?: string[];
     discordReplyInThread?: boolean;
+    discordRequireMention?: boolean;
   }
 ): Promise<RuntimeInstance> {
   return apiRequest(`/api/runtime/instances/${encodeURIComponent(instanceId)}/discord`, {

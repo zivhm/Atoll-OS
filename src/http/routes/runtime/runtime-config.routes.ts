@@ -465,6 +465,7 @@ export function registerRuntimeConfigRoutes(app: FastifyInstance, deps: RuntimeR
     const updated = updateInstanceOrThrow(runtimeInstance.id, {
       discordEnabled: input.enabled,
       discordBotToken: input.botToken,
+      discordAllowedUserIds: input.allowedUserIds,
       discordAllowedGuildIds: input.allowedGuildIds,
       discordAllowedChannelIds: input.allowedChannelIds,
       discordReplyInThread: input.replyInThread,
@@ -472,7 +473,9 @@ export function registerRuntimeConfigRoutes(app: FastifyInstance, deps: RuntimeR
       lastError: undefined
     });
     const hasUnscopedChannelAllowlist =
-      input.allowedChannelIds.length > 0 && input.allowedGuildIds.length === 0;
+      input.allowedChannelIds.length > 0 &&
+      input.allowedGuildIds.length === 0 &&
+      input.allowedUserIds.length === 0;
     if (hasUnscopedChannelAllowlist) {
       appendRuntimeEvent({
         requestId: request.id,
@@ -482,11 +485,13 @@ export function registerRuntimeConfigRoutes(app: FastifyInstance, deps: RuntimeR
         action: "discord_update",
         outcome: "started",
         message:
-          "Discord channel allowlist was provided without guild allowlist. Native config will keep fail-closed group policy."
+          "Discord channel allowlist was provided without a guild or user allowlist. Native config will keep fail-closed group policy."
       });
     }
     const hasNoGroupAllowlists =
-      input.allowedGuildIds.length === 0 && input.allowedChannelIds.length === 0;
+      input.allowedGuildIds.length === 0 &&
+      input.allowedUserIds.length === 0 &&
+      input.allowedChannelIds.length === 0;
     if (hasNoGroupAllowlists) {
       appendRuntimeEvent({
         requestId: request.id,
@@ -496,7 +501,7 @@ export function registerRuntimeConfigRoutes(app: FastifyInstance, deps: RuntimeR
         action: "discord_update",
         outcome: "started",
         message:
-          "Discord guild/channel allowlists are empty. Native config will use open group policy (allow all guild channels)."
+          "Discord user, guild, and channel allowlists are empty. Native config will use the runtime default group policy."
       });
     }
     try {
