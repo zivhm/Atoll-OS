@@ -50,7 +50,7 @@ The underlying runtime is unchanged. We just give it a purpose before you ever o
 | **Quick helper setup** | Spin up a helper, assign a workspace, and provision a runtime in minutes |
 | **Identity catalog** | Manage reusable business identities and helper presets from the UI |
 | **Runtime operations** | Inspect health, logs, events, repair actions, and reconcile flows |
-| **Channel wiring** | Expose Telegram and Discord settings without spreading config across tools |
+| **Channel wiring** | Expose shared messaging settings in the UI and runtime-native advanced settings where semantics differ |
 | **Single-host** | Run locally during development or in Docker Compose for a self-hosted deployment |
 
 ---
@@ -234,6 +234,21 @@ atoll-state.json          Local persisted state file
 | Default hosted provider | `openrouter` |
 | Default hosted model | `anthropic/claude-sonnet-4.6` |
 | Long-term direction | Harness/Provider-agnostic runtime support |
+
+### Runtime Support Matrix
+
+| Runtime | Status | Chat transport | Messaging surface |
+| --- | --- | --- | --- |
+| OpenClaw | Supported | Native OpenClaw gateway websocket | Shared Telegram, Slack, Discord controls |
+| ZeroClaw | Supported | HTTP webhook/message bridge | Shared Telegram controls, pairing/webhook flows |
+| Hermes | Beta | OpenAI-compatible API server (`/v1/chat/completions`) | Shared Telegram/Slack overlap plus Hermes-native advanced runtime config |
+
+### Hermes Notes
+
+- Hermes containers are managed directly by Atoll through the same runtime connector flow as other runtimes.
+- Hermes uses its native `/opt/data` layout with `config.yaml` and `.env`, not the OpenClaw filesystem contract.
+- Hermes-specific messaging controls that do not map cleanly to the shared UI are exposed through advanced runtime config instead of the generic integration cards.
+- Remaining Hermes risk is live provider QA with real Telegram, Slack, and Discord credentials. Local Docker provisioning, health, auth, model discovery, chat, and config seeding are verified.
 
 ---
 
