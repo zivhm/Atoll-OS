@@ -127,9 +127,7 @@ const RUNTIME_ENVIRONMENT: Record<RuntimeType, Record<string, string>> = {
     NODE_OPTIONS: "--no-deprecation"
   },
   zeroclaw: {},
-  hermes: {
-    HERMES_CONFIG_DIR: "/home/hermes/.hermes"
-  }
+  hermes: {}
 };
 
 const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
@@ -205,17 +203,49 @@ const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
       ...DEFAULT_CAPABILITIES,
       telegramToken: true,
       telegramAllowFrom: true,
-      telegramReplyInPrivate: true,
       slackBotToken: true,
-      slackAllowedChannelIds: true,
+      slackAppToken: true,
       slackAllowedUserIds: true,
-      slackReplyInThread: true,
-      discordBotToken: true,
-      discordAllowedGuildIds: true,
-      discordAllowedChannelIds: true,
-      discordReplyInThread: true,
-      discordRequireMention: true
-    }
+      slackReplyInThread: true
+    },
+    runtimeConfigFields: [
+      {
+        key: "discord_bot_token",
+        label: "Discord bot token",
+        kind: "string",
+        secret: true,
+        helperText: "Hermes-native Discord token. This is separate from the shared Discord integration model.",
+        placeholder: "discord bot token"
+      },
+      {
+        key: "discord_allowed_users",
+        label: "Discord allowed users",
+        kind: "string",
+        helperText: "Comma-separated Discord user IDs allowed to message this Hermes runtime.",
+        placeholder: "284102345871466496,198765432109876543"
+      },
+      {
+        key: "discord_allowed_channels",
+        label: "Discord allowed channels",
+        kind: "string",
+        helperText: "Optional comma-separated Discord channel IDs to restrict where Hermes responds.",
+        placeholder: "123456789012345678,987654321098765432"
+      },
+      {
+        key: "discord_require_mention",
+        label: "Discord require mention",
+        kind: "boolean",
+        helperText: "Require an @mention before Hermes responds in Discord server channels.",
+        defaultValue: true
+      },
+      {
+        key: "discord_auto_thread",
+        label: "Discord auto thread",
+        kind: "boolean",
+        helperText: "Create a fresh thread for each Discord @mention when supported by Hermes.",
+        defaultValue: true
+      }
+    ]
   }
 };
 
@@ -264,25 +294,21 @@ const RUNTIME_DESCRIPTORS: Record<RuntimeType, RuntimeDescriptor> = {
     ]
   },
   hermes: {
-    dataRoot: "/hermes-data",
-    mountPath: "/home/hermes/.hermes",
-    workspaceDir: "/hermes-data/atoll/workspace",
-    configPath: "/hermes-data/config.yaml",
-    extraSeedDirectories: ["/hermes-data/atoll", "/hermes-data/logs", "/hermes-data/sessions"],
-    seedOwner: "1000:1000",
+    dataRoot: "/opt/data",
+    mountPath: "/opt/data",
+    workspaceDir: "/opt/data/atoll/workspace",
+    configPath: "/opt/data/config.yaml",
+    extraSeedDirectories: ["/opt/data/atoll", "/opt/data/logs", "/opt/data/sessions"],
     seedPermissions: {
       dataRootMode: "700",
       configFileMode: "600",
       workspaceFileMode: "644"
     },
-    resolveLaunchArgs: ({ image, gatewayPort }) => [
+    resolveLaunchArgs: ({ image }) => [
       image,
-      "hermes",
       "gateway",
-      "--host",
-      "0.0.0.0",
-      "--port",
-      String(gatewayPort)
+      "run",
+      "--replace"
     ]
   }
 };

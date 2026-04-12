@@ -252,7 +252,7 @@ test("buildOpenClawConfigJson opens discord group policy when guild/channel allo
   assert.equal(payload.channels?.discord?.guilds, undefined);
 });
 
-test("buildHermes config output preserves Atoll workspace and API server settings", () => {
+test("buildHermes config output matches the container-native Hermes layout", () => {
   const configYaml = buildHermesConfigYaml({
     llm: {
       provider: "openrouter",
@@ -315,21 +315,28 @@ test("buildHermes config output preserves Atoll workspace and API server setting
     gatewayAuthToken: "bearer-token"
   });
 
-  assert.match(configYaml, /model:\s*"openrouter\/openai\/gpt-5\.3-chat"/u);
-  assert.match(configYaml, /workspace:\s*"\/home\/hermes\/\.hermes\/atoll\/workspace"/u);
-  assert.match(configYaml, /api_server:/u);
-  assert.match(configYaml, /enabled:\s*true/u);
-  assert.match(configYaml, /port:\s*42617/u);
-  assert.match(configYaml, /telegram:/u);
-  assert.match(configYaml, /slack:/u);
+  assert.match(configYaml, /model:\n\s+default:\s*"openai\/gpt-5\.3-chat"/u);
+  assert.match(configYaml, /provider:\s*"openrouter"/u);
+  assert.match(configYaml, /base_url:\s*"https:\/\/openrouter\.ai\/api\/v1"/u);
+  assert.match(configYaml, /terminal:\n\s+backend:\s*"local"/u);
+  assert.match(configYaml, /cwd:\s*"\/opt\/data\/atoll\/workspace"/u);
+  assert.match(configYaml, /platforms:\n\s+slack:/u);
+  assert.match(configYaml, /reply_in_thread:\s*true/u);
   assert.match(configYaml, /discord:/u);
+  assert.doesNotMatch(configYaml, /api_server:/u);
 
   assert.match(envFile, /^OPENROUTER_API_KEY=test-api-key/mu);
+  assert.match(envFile, /^API_SERVER_ENABLED=true/mu);
+  assert.match(envFile, /^API_SERVER_PORT=42617/mu);
   assert.match(envFile, /^API_SERVER_KEY=bearer-token/mu);
+  assert.match(envFile, /^API_SERVER_MODEL_NAME=openai\/gpt-5\.3-chat/mu);
+  assert.match(envFile, /^MESSAGING_CWD=\/opt\/data\/atoll\/workspace/mu);
   assert.match(envFile, /^TELEGRAM_BOT_TOKEN=telegram-token/mu);
   assert.match(envFile, /^SLACK_BOT_TOKEN=xoxb-bot/mu);
   assert.match(envFile, /^SLACK_APP_TOKEN=xapp-app/mu);
-  assert.match(envFile, /^DISCORD_BOT_TOKEN=discord-token/mu);
+  assert.match(envFile, /^SLACK_ALLOWED_USERS=U123/mu);
+  assert.doesNotMatch(envFile, /^SLACK_ALLOWED_CHANNELS=/mu);
+  assert.doesNotMatch(envFile, /^DISCORD_BOT_TOKEN=/mu);
 });
 
 test("workspace seed files include first-contact onboarding protocol", () => {
@@ -382,9 +389,9 @@ test("runtime descriptors expose mount, config, and workspace paths per runtime"
   assert.equal(zeroclaw.configPath, "/zeroclaw-data/.zeroclaw/config.toml");
   assert.equal(zeroclaw.workspaceDir, "/zeroclaw-data/workspace");
 
-  assert.equal(hermes.mountPath, "/home/hermes/.hermes");
-  assert.equal(hermes.configPath, "/hermes-data/config.yaml");
-  assert.equal(hermes.workspaceDir, "/hermes-data/atoll/workspace");
+  assert.equal(hermes.mountPath, "/opt/data");
+  assert.equal(hermes.configPath, "/opt/data/config.yaml");
+  assert.equal(hermes.workspaceDir, "/opt/data/atoll/workspace");
 });
 
 test("runtime launch args resolve from descriptor metadata", () => {
@@ -412,7 +419,7 @@ test("runtime launch args resolve from descriptor metadata", () => {
       gatewayPort: 42617,
       processMode: "daemon"
     }),
-    ["hermes:test", "hermes", "gateway", "--host", "0.0.0.0", "--port", "42617"]
+    ["hermes:test", "gateway", "run", "--replace"]
   );
 });
 
@@ -421,9 +428,7 @@ test("runtime environment adds deprecation suppression only for openclaw", () =>
     NODE_OPTIONS: "--no-deprecation"
   });
   assert.deepEqual(resolveRuntimeEnvironment("zeroclaw"), {});
-  assert.deepEqual(resolveRuntimeEnvironment("hermes"), {
-    HERMES_CONFIG_DIR: "/home/hermes/.hermes"
-  });
+  assert.deepEqual(resolveRuntimeEnvironment("hermes"), {});
 });
 
 test("runtime health metadata stays connector-driven", () => {
@@ -477,8 +482,101 @@ test("runtime capabilities are connector-driven for slack and discord support", 
   assert.equal(zeroclaw.capabilities.discordBotToken, false);
 
   assert.equal(hermes.capabilities.slackBotToken, true);
-  assert.equal(hermes.capabilities.slackAppToken, false);
-  assert.equal(hermes.capabilities.discordBotToken, true);
+  assert.equal(hermes.capabilities.slackAppToken, true);
+  assert.equal(hermes.capabilities.slackAllowedChannelIds, false);
+  assert.equal(hermes.capabilities.slackAllowedUserIds, true);
+  assert.equal(hermes.capabilities.telegramReplyInPrivate, false);
+  assert.equal(hermes.capabilities.discordBotToken, false);
+});
+
+test("hermes runtime exposes native advanced config fields for discord controls", () => {
+  const hermes = getRuntimeConnector("hermes");
+  const fieldKeys = (hermes.runtimeConfigFields ?? []).map((field) => field.key);
+
+  assert.deepEqual(fieldKeys, [
+    "discord_bot_token",
+    "discord_allowed_users",
+    "discord_allowed_channels",
+    "discord_require_mention",
+    "discord_auto_thread",
+  ]);
+});
+
+test("buildHermes config output includes hermes-specific discord runtime options", () => {
+  const configYaml = buildHermesConfigYaml({
+    llm: {
+      provider: "openrouter",
+      model: "openai/gpt-5.3-chat",
+      apiKey: "test-api-key"
+    },
+    telegram: {
+      enabled: false,
+      allowFrom: [],
+      replyInPrivate: true
+    },
+    slack: {
+      enabled: false,
+      allowedChannelIds: [],
+      allowedUserIds: [],
+      replyInThread: true
+    },
+    discord: {
+      enabled: false,
+      allowedGuildIds: [],
+      allowedChannelIds: [],
+      replyInThread: true,
+      requireMention: true
+    },
+    gatewayPort: 42617,
+    gatewayAuthToken: "bearer-token",
+    runtimeOptions: {
+      discord_allowed_channels: "D123,D456",
+      discord_require_mention: false,
+      discord_auto_thread: false
+    },
+    runtimeSecrets: {
+      discord_bot_token: "discord-token"
+    }
+  });
+  const envFile = buildHermesEnvFile({
+    llm: {
+      provider: "openrouter",
+      model: "openai/gpt-5.3-chat",
+      apiKey: "test-api-key"
+    },
+    telegram: {
+      enabled: false,
+      allowFrom: [],
+      replyInPrivate: true
+    },
+    slack: {
+      enabled: false,
+      allowedChannelIds: [],
+      allowedUserIds: [],
+      replyInThread: true
+    },
+    discord: {
+      enabled: false,
+      allowedGuildIds: [],
+      allowedChannelIds: [],
+      replyInThread: true,
+      requireMention: true
+    },
+    gatewayPort: 42617,
+    gatewayAuthToken: "bearer-token",
+    runtimeOptions: {
+      discord_allowed_users: "284102345871466496,198765432109876543"
+    },
+    runtimeSecrets: {
+      discord_bot_token: "discord-token"
+    }
+  });
+
+  assert.match(configYaml, /discord:\n\s+require_mention:\s*false/u);
+  assert.match(configYaml, /auto_thread:\s*false/u);
+  assert.match(configYaml, /allowed_channels:\n\s+-\s*"D123"\n\s+-\s*"D456"/u);
+  assert.match(envFile, /^DISCORD_BOT_TOKEN=discord-token/mu);
+  assert.match(envFile, /^DISCORD_ALLOWED_USERS=284102345871466496,198765432109876543/mu);
 });
 
 test("runtime catalog includes hermes and resolves runtime-specific image overrides", () => {
