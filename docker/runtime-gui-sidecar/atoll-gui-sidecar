@@ -1,0 +1,27 @@
+#!/bin/sh
+set -eu
+
+PLAYWRIGHT_PORT="${ATOLL_GUI_SIDECAR_PLAYWRIGHT_PORT:-3000}"
+PLAYWRIGHT_PATH="${ATOLL_GUI_SIDECAR_PLAYWRIGHT_PATH:-/playwright}"
+
+Xvfb "${DISPLAY}" -screen 0 "${ATOLL_GUI_SIDECAR_SCREEN}" -nolisten tcp >/tmp/atoll-gui-xvfb.log 2>&1 &
+openbox >/tmp/atoll-gui-openbox.log 2>&1 &
+
+if [ "${ATOLL_GUI_SIDECAR_ENABLE_VNC:-0}" = "1" ]; then
+  x11vnc \
+    -display "${DISPLAY}" \
+    -forever \
+    -shared \
+    -rfbport "${ATOLL_GUI_SIDECAR_VNC_PORT}" \
+    -nopw >/tmp/atoll-gui-x11vnc.log 2>&1 &
+
+  websockify \
+    --web=/usr/share/novnc/ \
+    "${ATOLL_GUI_SIDECAR_NOVNC_PORT}" \
+    "127.0.0.1:${ATOLL_GUI_SIDECAR_VNC_PORT}" >/tmp/atoll-gui-websockify.log 2>&1 &
+fi
+
+exec playwright run-server \
+  --host 0.0.0.0 \
+  --port "${PLAYWRIGHT_PORT}" \
+  --path "${PLAYWRIGHT_PATH}"

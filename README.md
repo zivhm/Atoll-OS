@@ -178,15 +178,31 @@ All important configuration lives in the repo-root `.env`.
 | `RUNTIME_PROVIDER` | | Default LLM provider for new helpers |
 | `RUNTIME_MODEL` | | Default LLM model for new helpers |
 | `RUNTIME_HTTP_TIMEOUT_MS` | | Runtime HTTP timeout in ms (default `3600000`) |
-| `RUNTIME_OPENCLAW_IMAGE` | | OpenClaw runtime image override |
-| `RUNTIME_ZEROCLAW_IMAGE` | | ZeroClaw runtime image override |
-| `RUNTIME_HERMES_IMAGE` | | Hermes runtime image override |
+| `RUNTIME_OPENCLAW_IMAGE` | ✅ | OpenClaw runtime image |
+| `RUNTIME_ZEROCLAW_IMAGE` | ✅ | ZeroClaw runtime image |
+| `RUNTIME_HERMES_IMAGE` | ✅ | Hermes runtime image |
+| `RUNTIME_GUI_SIDECAR_IMAGE` | ✅ | GUI sidecar runtime image (required when gui.enabled is used) |
 | `RUNTIME_STARTUP_VALIDATION` | | Prerequisite validation: `strict`, `warn`, or `off` |
 | `RUNTIME_ALLOW_PUBLIC_BIND` | | Whether helper gateways bind to host loopback by default |
 | `RUNTIME_REQUIRE_PAIRING` | | Whether pairing is required for supported runtimes |
 | `ATOLL_CORS_ALLOWED_ORIGINS` | | Needed when the web app is on a different origin than the API |
 
 > The Settings screen writes managed runtime defaults back to `.env`. Changes require an API restart to fully apply.
+
+Runtime image sources:
+- `RUNTIME_OPENCLAW_IMAGE`: published image (default in `.env.example`: `zivhm/openclaw`).
+- `RUNTIME_ZEROCLAW_IMAGE`: published image (default in `.env.example`: `zivhm/zeroclaw-runtime`).
+- `RUNTIME_HERMES_IMAGE`: published image (default in `.env.example`: `nousresearch/hermes-agent`).
+- `RUNTIME_GUI_SIDECAR_IMAGE`: local image built from [`docker/runtime-gui-sidecar/Dockerfile`](docker/runtime-gui-sidecar/Dockerfile) (default tag in `.env.example`: `atoll-gui-sidecar`).
+
+GUI sidecar runtime options (available on all runtime types):
+- `gui.enabled`: create and reconcile a GUI sidecar for the runtime container.
+- `gui.enableVnc`: enable `x11vnc` + `noVNC` inside the sidecar.
+- `gui.noVncPort`: optional host loopback port mapped to sidecar `6080` when VNC is enabled.
+
+Runtime container environment contract for GUI automation:
+- `ATOLL_GUI_PLAYWRIGHT_WS_ENDPOINT`: deterministic Playwright endpoint (example: `ws://atoll-gui-<runtime>:3000/playwright`).
+- `ATOLL_GUI_SIDECAR_CONTAINER`: resolved sidecar container name on the runtime network.
 
 ---
 

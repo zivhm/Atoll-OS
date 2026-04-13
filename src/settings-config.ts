@@ -122,8 +122,8 @@ export const SETTINGS_CONFIG_FIELDS: SettingsConfigFieldDefinition[] = [
     label: "ZeroClaw image",
     kind: "text",
     helpText: "Image used for ZeroClaw runtimes when the host catalog includes them.",
-    defaultValue: "zivhm/zeroclaw-runtime",
-    placeholder: "zivhm/zeroclaw-runtime"
+    defaultValue: "",
+    placeholder: "Set in .env (required)"
   },
   {
     key: "RUNTIME_OPENCLAW_IMAGE",
@@ -131,8 +131,17 @@ export const SETTINGS_CONFIG_FIELDS: SettingsConfigFieldDefinition[] = [
     label: "OpenClaw image",
     kind: "text",
     helpText: "Image used for OpenClaw runtimes.",
-    defaultValue: "zivhm/openclaw",
-    placeholder: "zivhm/openclaw"
+    defaultValue: "",
+    placeholder: "Set in .env (required)"
+  },
+  {
+    key: "RUNTIME_GUI_SIDECAR_IMAGE",
+    groupId: "runtime-behavior",
+    label: "GUI sidecar image",
+    kind: "text",
+    helpText: "Image used when gui.enabled runtime option is turned on.",
+    defaultValue: "",
+    placeholder: "Set in .env (required when gui.enabled=true)"
   },
   {
     key: "RUNTIME_HERMES_IMAGE",
@@ -140,8 +149,8 @@ export const SETTINGS_CONFIG_FIELDS: SettingsConfigFieldDefinition[] = [
     label: "Hermes image",
     kind: "text",
     helpText: "Image used for Hermes runtimes.",
-    defaultValue: "nousresearch/hermes-agent",
-    placeholder: "nousresearch/hermes-agent"
+    defaultValue: "",
+    placeholder: "Set in .env (required)"
   },
   {
     key: "ATOLL_SUPPORTED_RUNTIME_TYPES",

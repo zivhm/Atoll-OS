@@ -1,8 +1,5 @@
 import type { RuntimeType } from "./store.js";
 
-export const DEFAULT_ZEROCLAW_RUNTIME_IMAGE = "zivhm/zeroclaw-runtime";
-export const DEFAULT_OPENCLAW_RUNTIME_IMAGE = "zivhm/openclaw";
-export const DEFAULT_HERMES_RUNTIME_IMAGE = "nousresearch/hermes-agent";
 export const DEFAULT_RUNTIME_TYPE: RuntimeType = "openclaw";
 export const ALL_RUNTIME_TYPES: RuntimeType[] = ["openclaw", "zeroclaw", "hermes"];
 
@@ -124,6 +121,30 @@ const DEFAULT_CAPABILITIES: RuntimeConnectorCapabilities = {
   sharedFiles: true
 };
 
+const GUI_SIDECAR_RUNTIME_CONFIG_FIELDS: RuntimeConfigFieldDescriptor[] = [
+  {
+    key: "gui.enabled",
+    label: "Enable GUI sidecar",
+    kind: "boolean",
+    helperText: "Provision a companion GUI/browser container for this runtime.",
+    defaultValue: false
+  },
+  {
+    key: "gui.enableVnc",
+    label: "Enable noVNC",
+    kind: "boolean",
+    helperText: "Start x11vnc + noVNC in the sidecar. Keep off unless operator viewing is needed.",
+    defaultValue: false
+  },
+  {
+    key: "gui.noVncPort",
+    label: "Host noVNC port",
+    kind: "number",
+    helperText: "Optional host loopback port to publish noVNC (container port 6080).",
+    placeholder: "6080"
+  }
+];
+
 const RUNTIME_ENVIRONMENT: Record<RuntimeType, Record<string, string>> = {
   openclaw: {
     NODE_OPTIONS: "--no-deprecation"
@@ -138,7 +159,6 @@ const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
     label: "OpenClaw",
     maturity: "supported",
     imageEnvVar: "RUNTIME_OPENCLAW_IMAGE",
-    defaultImage: DEFAULT_OPENCLAW_RUNTIME_IMAGE,
     defaultRequirePairing: false,
     defaultAllowPublicBind: true,
     healthMode: "http",
@@ -169,7 +189,6 @@ const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
     label: "ZeroClaw",
     maturity: "supported",
     imageEnvVar: "RUNTIME_ZEROCLAW_IMAGE",
-    defaultImage: DEFAULT_ZEROCLAW_RUNTIME_IMAGE,
     defaultRequirePairing: false,
     defaultAllowPublicBind: true,
     healthMode: "http",
@@ -193,7 +212,6 @@ const RUNTIME_CONNECTORS: Record<RuntimeType, RuntimeConnector> = {
     label: "Hermes",
     maturity: "beta",
     imageEnvVar: "RUNTIME_HERMES_IMAGE",
-    defaultImage: DEFAULT_HERMES_RUNTIME_IMAGE,
     defaultRequirePairing: false,
     defaultAllowPublicBind: true,
     healthMode: "http",
@@ -413,6 +431,10 @@ export function buildRuntimeCatalog(input: {
 }): RuntimeCatalogItem[] {
   return input.runtimeTypes.map((runtimeType) => {
     const connector = getRuntimeConnector(runtimeType);
+    const connectorFields = connector.runtimeConfigFields ?? [];
+    const runtimeConfigFields = [...GUI_SIDECAR_RUNTIME_CONFIG_FIELDS, ...connectorFields].filter(
+      (field, index, array) => array.findIndex((candidate) => candidate.key === field.key) === index
+    );
     return {
       ...connector,
       defaultGatewayPort: connector.defaultGatewayPort ?? input.runtimeGatewayPort,
@@ -420,7 +442,7 @@ export function buildRuntimeCatalog(input: {
         ? input.runtimeRequirePairing
         : connector.defaultRequirePairing,
       defaultAllowPublicBind: input.runtimeAllowPublicBind,
-      runtimeConfigFields: connector.runtimeConfigFields ?? [],
+      runtimeConfigFields,
       resolvedImage: resolveRuntimeImageForType({
         runtimeType,
         runtimeImages: input.runtimeImages

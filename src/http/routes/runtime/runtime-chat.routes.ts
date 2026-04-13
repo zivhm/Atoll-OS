@@ -924,7 +924,11 @@ function pickString(value: unknown): string | undefined {
 }
 
 function supportsManagedRuntimeChatToken(runtimeType: RuntimeType): boolean {
-  return runtimeType === "openclaw" || runtimeType === "zeroclaw" || runtimeType === "hermes";
+  return (
+    runtimeType === "openclaw" ||
+    runtimeType === "zeroclaw" ||
+    runtimeType === "hermes"
+  );
 }
 
 function buildRuntimeAwareMessage(runtimeInstance: RuntimeInstance, userMessage: string): string {

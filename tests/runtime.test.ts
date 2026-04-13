@@ -452,13 +452,13 @@ test("runtime health metadata stays connector-driven", () => {
   assert.equal(getRuntimeConnector("hermes").chatEndpoint, "/v1/chat/completions");
 });
 
-test("runtime connectors default to the configured published images", () => {
-  assert.equal(getRuntimeConnector("openclaw").defaultImage, "zivhm/openclaw");
-  assert.equal(
-    getRuntimeConnector("zeroclaw").defaultImage,
-    "zivhm/zeroclaw-runtime"
-  );
-  assert.equal(getRuntimeConnector("hermes").defaultImage, "nousresearch/hermes-agent");
+test("runtime connectors use env image keys (no hardcoded image defaults)", () => {
+  assert.equal(getRuntimeConnector("openclaw").imageEnvVar, "RUNTIME_OPENCLAW_IMAGE");
+  assert.equal(getRuntimeConnector("zeroclaw").imageEnvVar, "RUNTIME_ZEROCLAW_IMAGE");
+  assert.equal(getRuntimeConnector("hermes").imageEnvVar, "RUNTIME_HERMES_IMAGE");
+  assert.equal(getRuntimeConnector("openclaw").defaultImage, undefined);
+  assert.equal(getRuntimeConnector("zeroclaw").defaultImage, undefined);
+  assert.equal(getRuntimeConnector("hermes").defaultImage, undefined);
 });
 
 test("runtime registry exposes all supported managed runtime types", () => {
@@ -498,11 +498,37 @@ test("runtime capabilities are connector-driven for slack and discord support", 
   assert.equal(hermes.capabilities.discordRequireMention, true);
 });
 
-test("hermes runtime removes duplicate discord engine settings", () => {
+test("runtime catalog exposes shared GUI sidecar config fields without duplicates", () => {
+  const openclaw = getRuntimeConnector("openclaw");
+  const zeroclaw = getRuntimeConnector("zeroclaw");
   const hermes = getRuntimeConnector("hermes");
-  const fieldKeys = (hermes.runtimeConfigFields ?? []).map((field) => field.key);
 
-  assert.deepEqual(fieldKeys, []);
+  const catalog = buildRuntimeCatalog({
+    runtimeTypes: ["openclaw", "zeroclaw", "hermes"],
+    runtimeImages: {
+      openclaw: "openclaw:test",
+      zeroclaw: "zeroclaw:test",
+      hermes: "hermes:test"
+    },
+    runtimeGatewayPort: 42617,
+    runtimeRequirePairing: false,
+    runtimeAllowPublicBind: true
+  });
+
+  const expectedGuiFieldKeys = ["gui.enabled", "gui.enableVnc", "gui.noVncPort"];
+  for (const runtimeType of ["openclaw", "zeroclaw", "hermes"] as const) {
+    const item = catalog.find((entry) => entry.id === runtimeType);
+    assert.ok(item);
+    const keys = (item.runtimeConfigFields ?? []).map((field) => field.key);
+    for (const expectedKey of expectedGuiFieldKeys) {
+      assert.equal(keys.includes(expectedKey), true);
+    }
+    assert.equal(keys.length, new Set(keys).size);
+  }
+
+  assert.deepEqual((openclaw.runtimeConfigFields ?? []).map((field) => field.key), []);
+  assert.deepEqual((zeroclaw.runtimeConfigFields ?? []).map((field) => field.key), []);
+  assert.deepEqual((hermes.runtimeConfigFields ?? []).map((field) => field.key), []);
 });
 
 test("buildHermes config output maps shared discord settings into native hermes config", () => {

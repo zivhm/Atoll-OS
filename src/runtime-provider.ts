@@ -31,6 +31,14 @@ export type RuntimeProvider = {
     volumeName: string;
     destroyVolume?: boolean;
   }) => Promise<void>;
+  reconcileRuntimeGuiSidecar?: (input: {
+    runtimeType?: ProvisionRuntimeContainerInput["runtimeType"];
+    containerName: string;
+    volumeName: string;
+    networkName: string;
+    sharedWorkspaceMount?: ProvisionRuntimeContainerInput["sharedWorkspaceMount"];
+    runtimeOptions?: Record<string, unknown>;
+  }) => Promise<void>;
   listManagedRuntimeContainers?: () => Promise<ManagedRuntimeContainer[]>;
   readRuntimeBearerToken?: (input: {
     runtimeType?: ProvisionRuntimeContainerInput["runtimeType"];
@@ -76,6 +84,10 @@ export function createLocalRuntimeProvider(runtimeOps: RuntimeOps): RuntimeProvi
     getRuntimePairingInfo: (containerName) => runtimeOps.getRuntimePairingInfo(containerName),
     getRuntimeEnvironmentDiagnostics: (input) => runtimeOps.getRuntimeEnvironmentDiagnostics(input),
     destroyRuntimeContainer: (input) => runtimeOps.destroyRuntimeContainer(input),
+    reconcileRuntimeGuiSidecar: (input) =>
+      runtimeOps.reconcileRuntimeGuiSidecar
+        ? runtimeOps.reconcileRuntimeGuiSidecar(input)
+        : Promise.resolve(),
     listManagedRuntimeContainers: () =>
       runtimeOps.listManagedRuntimeContainers ? runtimeOps.listManagedRuntimeContainers() : Promise.resolve([]),
     readRuntimeBearerToken: (input) =>

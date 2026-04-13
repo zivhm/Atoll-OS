@@ -46,9 +46,6 @@ import {
 import {
   ALL_RUNTIME_TYPES,
   buildRuntimeCatalog,
-  DEFAULT_HERMES_RUNTIME_IMAGE,
-  DEFAULT_OPENCLAW_RUNTIME_IMAGE,
-  DEFAULT_ZEROCLAW_RUNTIME_IMAGE,
   getRuntimeDescriptor,
   resolveDefaultRuntimeType,
   resolveSupportedRuntimeTypes,
@@ -1094,7 +1091,9 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   async function applyRuntimeConfigForInstance(runtimeInstance: RuntimeInstance): Promise<RuntimeInstance> {
     const configuredRuntimeInstance = ensureRuntimeBearerToken(runtimeInstance);
+    const tenant = store.getTenant(configuredRuntimeInstance.tenantId);
     const workspaceProfile = resolveRuntimeWorkspaceProfile(store, configuredRuntimeInstance);
+    const sharedWorkspaceMount = resolveRuntimeSharedWorkspaceMount(tenant);
     await runtimeProvider.writeRuntimeConfig({
       runtimeType: configuredRuntimeInstance.runtimeType,
       volumeName: configuredRuntimeInstance.volumeName,
@@ -1133,6 +1132,14 @@ export async function buildApp(options: BuildAppOptions = {}) {
       bearerToken: configuredRuntimeInstance.bearerToken,
       runtimeOptions: configuredRuntimeInstance.runtimeOptions,
       runtimeSecrets: configuredRuntimeInstance.runtimeSecrets
+    });
+    await runtimeProvider.reconcileRuntimeGuiSidecar?.({
+      runtimeType: configuredRuntimeInstance.runtimeType,
+      containerName: configuredRuntimeInstance.containerName,
+      volumeName: configuredRuntimeInstance.volumeName,
+      networkName: configuredRuntimeInstance.networkName,
+      sharedWorkspaceMount,
+      runtimeOptions: configuredRuntimeInstance.runtimeOptions
     });
 
     const shouldRestart =
@@ -1355,18 +1362,18 @@ function resolveConfig(overrides: Partial<AppConfig> = {}): AppConfig {
   const secretsKey = overrides.secretsKey ?? getEnvValue("ATOLL_SECRETS_KEY") ?? "";
   const stateFilePath =
     overrides.stateFilePath ?? getEnvValue("ATOLL_STATE_FILE") ?? "./atoll-state.json";
-  const runtimeImage =
-    overrides.runtimeImage ??
-    process.env.RUNTIME_ZEROCLAW_IMAGE ??
-    DEFAULT_ZEROCLAW_RUNTIME_IMAGE;
-  const runtimeOpenclawImage =
-    overrides.runtimeOpenclawImage ??
-    process.env.RUNTIME_OPENCLAW_IMAGE ??
-    DEFAULT_OPENCLAW_RUNTIME_IMAGE;
-  const runtimeHermesImage =
-    overrides.runtimeHermesImage ??
-    process.env.RUNTIME_HERMES_IMAGE ??
-    DEFAULT_HERMES_RUNTIME_IMAGE;
+  const runtimeImage = resolveRequiredRuntimeImage(
+    overrides.runtimeImage,
+    "RUNTIME_ZEROCLAW_IMAGE"
+  );
+  const runtimeOpenclawImage = resolveRequiredRuntimeImage(
+    overrides.runtimeOpenclawImage,
+    "RUNTIME_OPENCLAW_IMAGE"
+  );
+  const runtimeHermesImage = resolveRequiredRuntimeImage(
+    overrides.runtimeHermesImage,
+    "RUNTIME_HERMES_IMAGE"
+  );
   const supportedRuntimeTypes =
     overrides.supportedRuntimeTypes ??
     resolveSupportedRuntimeTypes(process.env.ATOLL_SUPPORTED_RUNTIME_TYPES, ALL_RUNTIME_TYPES);
@@ -1521,6 +1528,17 @@ function parseCorsAllowedOrigins(rawValue: string | undefined, sourceLabel: stri
     normalized.push(origin);
   }
   return normalized;
+}
+
+function resolveRequiredRuntimeImage(
+  override: string | undefined,
+  envKey: "RUNTIME_ZEROCLAW_IMAGE" | "RUNTIME_OPENCLAW_IMAGE" | "RUNTIME_HERMES_IMAGE"
+): string {
+  const value = (override ?? getEnvValue(envKey) ?? "").trim();
+  if (!value) {
+    throw new Error(`${envKey} is required`);
+  }
+  return value;
 }
 
 function resolveRuntimeStartupValidationMode(

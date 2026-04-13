@@ -3,9 +3,6 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
 
 import {
-  DEFAULT_HERMES_RUNTIME_IMAGE,
-  DEFAULT_OPENCLAW_RUNTIME_IMAGE,
-  DEFAULT_ZEROCLAW_RUNTIME_IMAGE,
   getRuntimeConnector,
   getRuntimeDescriptor,
   normalizeRuntimeType,
@@ -22,6 +19,13 @@ const execFileAsync = promisify(execFile);
 
 const DEFAULT_GATEWAY_PORT = 42617;
 const CONFIG_SEED_IMAGE = "alpine:3.20";
+const GUI_SIDECAR_IMAGE_ENV = "RUNTIME_GUI_SIDECAR_IMAGE";
+const GUI_SIDECAR_CONTAINER_PREFIX = "atoll-gui-";
+const GUI_SIDECAR_CONTAINER_ENV = "ATOLL_GUI_SIDECAR_CONTAINER";
+const GUI_SIDECAR_PLAYWRIGHT_WS_ENDPOINT_ENV = "ATOLL_GUI_PLAYWRIGHT_WS_ENDPOINT";
+const GUI_SIDECAR_PLAYWRIGHT_PORT = 3000;
+const GUI_SIDECAR_PLAYWRIGHT_PATH = "/playwright";
+const GUI_SIDECAR_NOVNC_CONTAINER_PORT = 6080;
 const DEFAULT_CONTAINER_CLI = "docker";
 const DEFAULT_RUNTIME_PROCESS_MODE: RuntimeProcessMode = "daemon";
 const LOOPBACK_PUBLISH_HOST = "127.0.0.1";
@@ -143,6 +147,14 @@ export type RuntimeOps = {
     volumeName: string;
     destroyVolume?: boolean;
   }) => Promise<void>;
+  reconcileRuntimeGuiSidecar?: (input: {
+    runtimeType?: RuntimeType;
+    containerName: string;
+    volumeName: string;
+    networkName: string;
+    sharedWorkspaceMount?: RuntimeSharedWorkspaceMount;
+    runtimeOptions?: Record<string, unknown>;
+  }) => Promise<void>;
   listManagedRuntimeContainers?: () => Promise<ManagedRuntimeContainer[]>;
   readRuntimeBearerToken?: (input: {
     runtimeType?: RuntimeType;
@@ -257,7 +269,8 @@ export const runtimeOps: RuntimeOps = {
   listRuntimeSharedFiles,
   readRuntimeSharedFile,
   writeRuntimeSharedFile,
-  deleteRuntimeSharedFile
+  deleteRuntimeSharedFile,
+  reconcileRuntimeGuiSidecar
 };
 
 export async function provisionRuntimeContainer(input: ProvisionRuntimeContainerInput): Promise<void> {
@@ -272,6 +285,8 @@ export async function provisionRuntimeContainer(input: ProvisionRuntimeContainer
   const gatewayPort = input.gatewayPort ?? connector.defaultGatewayPort ?? DEFAULT_GATEWAY_PORT;
   const allowPublicBind = input.allowPublicBind ?? true;
   const runtimeProcessMode = getRuntimeProcessMode();
+  const sidecarContainerName = resolveRuntimeGuiSidecarContainerName(input.containerName);
+  const sidecarPlaywrightWsEndpoint = resolveRuntimeGuiPlaywrightWsEndpoint(sidecarContainerName);
 
   if (createNetworkIfMissing) {
     await ensureRuntimeNetwork(input.networkName);
@@ -341,6 +356,8 @@ export async function provisionRuntimeContainer(input: ProvisionRuntimeContainer
   for (const [key, value] of Object.entries(runtimeEnvironment)) {
     runArgs.push("-e", `${key}=${value}`);
   }
+  runArgs.push("-e", `${GUI_SIDECAR_CONTAINER_ENV}=${sidecarContainerName}`);
+  runArgs.push("-e", `${GUI_SIDECAR_PLAYWRIGHT_WS_ENDPOINT_ENV}=${sidecarPlaywrightWsEndpoint}`);
 
   runArgs.push(
     ...resolveRuntimeLaunchArgs(runtimeType, {
@@ -351,6 +368,14 @@ export async function provisionRuntimeContainer(input: ProvisionRuntimeContainer
   );
 
   await runDocker(runArgs, `start runtime container ${input.containerName}`);
+  await reconcileRuntimeGuiSidecar({
+    runtimeType,
+    containerName: input.containerName,
+    volumeName: input.volumeName,
+    networkName: input.networkName,
+    sharedWorkspaceMount: input.sharedWorkspaceMount,
+    runtimeOptions: input.runtimeOptions
+  });
 }
 
 export async function writeRuntimeConfig(input: WriteRuntimeConfigInput): Promise<void> {
@@ -554,14 +579,20 @@ export async function writeRuntimeConfig(input: WriteRuntimeConfigInput): Promis
 
 export async function restartRuntimeContainer(containerName: string): Promise<void> {
   await runDocker(["restart", containerName], `restart container ${containerName}`);
+  const sidecarContainerName = resolveRuntimeGuiSidecarContainerName(containerName);
+  await runDocker(["restart", sidecarContainerName], `restart GUI sidecar ${sidecarContainerName}`, true);
 }
 
 export async function startRuntimeContainer(containerName: string): Promise<void> {
   await runDocker(["start", containerName], `start container ${containerName}`);
+  const sidecarContainerName = resolveRuntimeGuiSidecarContainerName(containerName);
+  await runDocker(["start", sidecarContainerName], `start GUI sidecar ${sidecarContainerName}`, true);
 }
 
 export async function stopRuntimeContainer(containerName: string): Promise<void> {
   await runDocker(["stop", containerName], `stop container ${containerName}`);
+  const sidecarContainerName = resolveRuntimeGuiSidecarContainerName(containerName);
+  await runDocker(["stop", sidecarContainerName], `stop GUI sidecar ${sidecarContainerName}`, true);
 }
 
 export async function readRuntimeContainerLogs(containerName: string, tail = 250): Promise<string> {
@@ -613,10 +644,81 @@ export async function destroyRuntimeContainer(input: {
   volumeName: string;
   destroyVolume?: boolean;
 }): Promise<void> {
+  const sidecarContainerName = resolveRuntimeGuiSidecarContainerName(input.containerName);
+  await runDocker(["rm", "-f", sidecarContainerName], `remove GUI sidecar ${sidecarContainerName}`, true);
   await runDocker(["rm", "-f", input.containerName], `remove container ${input.containerName}`, true);
   if (input.destroyVolume ?? true) {
     await runDocker(["volume", "rm", input.volumeName], `remove volume ${input.volumeName}`, true);
   }
+}
+
+export async function reconcileRuntimeGuiSidecar(input: {
+  runtimeType?: RuntimeType;
+  containerName: string;
+  volumeName: string;
+  networkName: string;
+  sharedWorkspaceMount?: RuntimeSharedWorkspaceMount;
+  runtimeOptions?: Record<string, unknown>;
+}): Promise<void> {
+  const settings = resolveRuntimeGuiSidecarSettings(input.runtimeOptions);
+  const sidecarContainerName = resolveRuntimeGuiSidecarContainerName(input.containerName);
+
+  await runDocker(["rm", "-f", sidecarContainerName], `remove stale GUI sidecar ${sidecarContainerName}`, true);
+  if (!settings.enabled) {
+    return;
+  }
+
+  const runtimeType = normalizeRuntimeType(input.runtimeType);
+  const descriptor = getRuntimeDescriptor(runtimeType);
+  const sidecarImage = resolveRuntimeGuiSidecarImage();
+  const runArgs = [
+    "run",
+    "-d",
+    "--name",
+    sidecarContainerName,
+    "--network",
+    input.networkName,
+    "--restart",
+    "unless-stopped",
+    "--label",
+    "atoll.managed=true",
+    "--label",
+    "atoll.role=runtime-gui-sidecar",
+    "--label",
+    `atoll.runtimeType=${runtimeType}`,
+    "--label",
+    `atoll.runtimeContainer=${input.containerName}`,
+    "-v",
+    `${input.volumeName}:${descriptor.dataRoot}`,
+    "-e",
+    `ATOLL_GUI_RUNTIME_TYPE=${runtimeType}`,
+    "-e",
+    `ATOLL_GUI_RUNTIME_WORKSPACE=${descriptor.workspaceDir}`,
+    "-e",
+    `ATOLL_GUI_SIDECAR_PLAYWRIGHT_PORT=${GUI_SIDECAR_PLAYWRIGHT_PORT}`,
+    "-e",
+    `ATOLL_GUI_SIDECAR_PLAYWRIGHT_PATH=${GUI_SIDECAR_PLAYWRIGHT_PATH}`
+  ];
+
+  if (input.sharedWorkspaceMount?.volumeName) {
+    runArgs.push(
+      "-v",
+      `${input.sharedWorkspaceMount.volumeName}:${input.sharedWorkspaceMount.mountPath}`
+    );
+  }
+
+  if (settings.enableVnc) {
+    runArgs.push("-e", "ATOLL_GUI_SIDECAR_ENABLE_VNC=1");
+    if (settings.noVncPort !== undefined) {
+      runArgs.push(
+        "-p",
+        `${LOOPBACK_PUBLISH_HOST}:${settings.noVncPort}:${GUI_SIDECAR_NOVNC_CONTAINER_PORT}`
+      );
+    }
+  }
+
+  runArgs.push(sidecarImage);
+  await runDocker(runArgs, `start GUI sidecar ${sidecarContainerName}`);
 }
 
 export async function listRuntimeSharedFiles(input: {
@@ -728,7 +830,10 @@ export async function deleteRuntimeSharedFile(input: {
 export async function getRuntimeEnvironmentDiagnostics(
   input: RuntimeEnvironmentDiagnosticsInput
 ): Promise<RuntimeEnvironmentDiagnostics> {
-  const imageName = input.image.trim() || DEFAULT_ZEROCLAW_RUNTIME_IMAGE;
+  const imageName = input.image.trim();
+  if (!imageName) {
+    throw new Error("Runtime diagnostics requires a non-empty image name.");
+  }
   const networkName = input.network.trim();
   const containerName = input.containerName?.trim();
 
@@ -1113,7 +1218,11 @@ export async function readRuntimeBearerToken(input: {
   volumeName: string;
 }): Promise<string | undefined> {
   const runtimeType = normalizeRuntimeType(input.runtimeType);
-  if (runtimeType !== "openclaw" && runtimeType !== "zeroclaw" && runtimeType !== "hermes") {
+  if (
+    runtimeType !== "openclaw" &&
+    runtimeType !== "zeroclaw" &&
+    runtimeType !== "hermes"
+  ) {
     return undefined;
   }
 
@@ -1952,13 +2061,91 @@ function parsePortNumber(value: string | undefined): number {
 }
 
 function resolveDefaultRuntimeImage(runtimeType: RuntimeType): string {
-  if (runtimeType === "openclaw") {
-    return DEFAULT_OPENCLAW_RUNTIME_IMAGE;
+  const envKey =
+    runtimeType === "openclaw"
+      ? "RUNTIME_OPENCLAW_IMAGE"
+      : runtimeType === "zeroclaw"
+          ? "RUNTIME_ZEROCLAW_IMAGE"
+          : "RUNTIME_HERMES_IMAGE";
+  const value = process.env[envKey]?.trim() || "";
+  if (!value) {
+    throw new Error(`${envKey} is required when runtime image is not explicitly provided.`);
   }
-  if (runtimeType === "zeroclaw") {
-    return DEFAULT_ZEROCLAW_RUNTIME_IMAGE;
+  return value;
+}
+
+function resolveRuntimeGuiSidecarImage(): string {
+  const image = process.env[GUI_SIDECAR_IMAGE_ENV]?.trim() || "";
+  if (!image) {
+    throw new Error(`${GUI_SIDECAR_IMAGE_ENV} is required when GUI sidecar is enabled.`);
   }
-  return DEFAULT_HERMES_RUNTIME_IMAGE;
+  return image;
+}
+
+function resolveRuntimeGuiSidecarContainerName(containerName: string): string {
+  const normalized = containerName.trim().replace(/^atoll-rt-/u, "").replace(/[^a-zA-Z0-9_.-]/gu, "-");
+  return `${GUI_SIDECAR_CONTAINER_PREFIX}${normalized || "runtime"}`;
+}
+
+function resolveRuntimeGuiPlaywrightWsEndpoint(sidecarContainerName: string): string {
+  return `ws://${sidecarContainerName}:${GUI_SIDECAR_PLAYWRIGHT_PORT}${GUI_SIDECAR_PLAYWRIGHT_PATH}`;
+}
+
+function resolveRuntimeGuiSidecarSettings(runtimeOptions?: Record<string, unknown>): {
+  enabled: boolean;
+  enableVnc: boolean;
+  noVncPort?: number;
+} {
+  const options = runtimeOptions ?? {};
+  const guiOptions = asRecord(options.gui);
+  const enabled = parseBooleanRuntimeOption(
+    options["gui.enabled"] ?? options.guiEnabled ?? guiOptions?.enabled,
+    false
+  );
+  const enableVnc = parseBooleanRuntimeOption(
+    options["gui.enableVnc"] ?? guiOptions?.enableVnc,
+    false
+  );
+  const noVncPort = parseOptionalPositiveIntegerRuntimeOption(
+    options["gui.noVncPort"] ?? guiOptions?.noVncPort
+  );
+  return {
+    enabled,
+    enableVnc,
+    ...(noVncPort ? { noVncPort } : {})
+  };
+}
+
+function parseBooleanRuntimeOption(value: unknown, fallback: boolean): boolean {
+  if (typeof value === "boolean") {
+    return value;
+  }
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value !== 0 : fallback;
+  }
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1" || normalized === "yes" || normalized === "on") {
+      return true;
+    }
+    if (normalized === "false" || normalized === "0" || normalized === "no" || normalized === "off") {
+      return false;
+    }
+  }
+  return fallback;
+}
+
+function parseOptionalPositiveIntegerRuntimeOption(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === "string") {
+    const parsed = Number.parseInt(value.trim(), 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return undefined;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
