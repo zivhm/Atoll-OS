@@ -767,22 +767,23 @@ export async function writeRuntimeSharedFile(input: {
 }): Promise<RuntimeSharedFile> {
   const runtimeType = normalizeRuntimeType(input.runtimeType);
   const descriptor = getRuntimeDescriptor(runtimeType);
-  const fileName = sanitizeRuntimeSharedFileName(input.fileName);
+  const relativePath = sanitizeRuntimeSharedRelativePath(input.fileName);
+  const fileName = getRuntimeSharedFileBaseName(relativePath);
   const sharedFilesDir = getRuntimeSharedFilesDir(runtimeType);
   const uploadedAt = new Date().toISOString();
 
   await runtimeVolumeIo.writeFile({
     volumeName: input.volumeName,
     mountPath: descriptor.dataRoot,
-    filePath: `${sharedFilesDir}/${fileName}`,
+    filePath: `${sharedFilesDir}/${relativePath}`,
     content: input.content,
-    label: `write runtime shared file ${input.volumeName}/${fileName}`
+    label: `write runtime shared file ${input.volumeName}/${relativePath}`
   });
 
   const nextItem: RuntimeSharedFile = {
-    id: fileName,
+    id: relativePath,
     name: fileName,
-    relativePath: fileName,
+    relativePath,
     sizeBytes: input.content.byteLength,
     uploadedAt
   };
@@ -790,7 +791,7 @@ export async function writeRuntimeSharedFile(input: {
     runtimeType,
     volumeName: input.volumeName
   });
-  const nextItems = [...currentItems.filter((item) => item.relativePath !== fileName), nextItem];
+  const nextItems = [...currentItems.filter((item) => item.relativePath !== relativePath), nextItem];
   await writeRuntimeSharedFilesManifest({
     runtimeType,
     volumeName: input.volumeName,
@@ -2342,12 +2343,29 @@ function sanitizeRuntimeSharedFileName(fileName: string): string {
   return trimmed;
 }
 
-function sanitizeRuntimeSharedRelativePath(relativePath: string): string {
+export function sanitizeRuntimeSharedRelativePath(relativePath: string): string {
   const normalized = relativePath.trim().replaceAll("\\", "/");
-  if (!normalized || normalized.includes("/")) {
+  if (!normalized || normalized.startsWith("/") || /^[A-Za-z]:/u.test(normalized)) {
     throw new Error("Invalid shared file path");
   }
-  return sanitizeRuntimeSharedFileName(normalized);
+  const segments = normalized.split("/");
+  if (segments.length === 0) {
+    throw new Error("Invalid shared file path");
+  }
+  try {
+    return segments.map((segment) => sanitizeRuntimeSharedFileName(segment)).join("/");
+  } catch {
+    throw new Error("Invalid shared file path");
+  }
+}
+
+function getRuntimeSharedFileBaseName(relativePath: string): string {
+  const segments = relativePath.split("/");
+  const baseName = segments.at(-1);
+  if (!baseName) {
+    throw new Error("Invalid shared file path");
+  }
+  return baseName;
 }
 
 async function ensureRuntimeNetwork(networkName: string): Promise<void> {

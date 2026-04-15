@@ -1239,7 +1239,7 @@ export function parseRuntimeSharedFileParams(payload: unknown): { fileId: string
 
 export function parseRuntimeSharedFilesUploadInput(payload: unknown): {
   files: Array<{
-    name: string;
+    relativePath: string;
     content: Buffer;
   }>;
 } {
@@ -1253,8 +1253,9 @@ export function parseRuntimeSharedFilesUploadInput(payload: unknown): {
   }
 
   const files = rawFiles.map((rawFile) => {
-    const file = rawFile as { name?: unknown; contentBase64?: unknown };
+    const file = rawFile as { name?: unknown; relativePath?: unknown; contentBase64?: unknown };
     const name = getOptionalTrimmedString(file?.name) ?? "";
+    const relativePathInput = getOptionalTrimmedString(file?.relativePath) ?? name;
     const contentBase64 = getOptionalTrimmedString(file?.contentBase64) ?? "";
 
     if (!name) {
@@ -1278,10 +1279,47 @@ export function parseRuntimeSharedFilesUploadInput(payload: unknown): {
       throw new Error(`Validation failed: file ${name} exceeds the 5 MB upload limit`);
     }
 
-    return { name, content };
+    let relativePath: string;
+    try {
+      relativePath = normalizeRuntimeSharedUploadRelativePath(relativePathInput);
+    } catch {
+      throw new Error(`Validation failed: file ${name} has an invalid relativePath`);
+    }
+
+    return { relativePath, content };
   });
 
   return { files };
+}
+
+const WINDOWS_RESERVED_FILENAME_RE = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(\..*)?$/iu;
+
+function normalizeRuntimeSharedUploadRelativePath(value: string): string {
+  const normalized = value.trim().replaceAll("\\", "/");
+  if (!normalized || normalized.startsWith("/") || /^[A-Za-z]:/u.test(normalized)) {
+    throw new Error("Invalid runtime shared upload path");
+  }
+  const segments = normalized.split("/");
+  if (segments.length === 0) {
+    throw new Error("Invalid runtime shared upload path");
+  }
+
+  const safeSegments = segments.map((segment) => normalizeRuntimeSharedUploadPathSegment(segment));
+  return safeSegments.join("/");
+}
+
+function normalizeRuntimeSharedUploadPathSegment(value: string): string {
+  const segment = value.trim();
+  if (
+    !segment ||
+    segment === "." ||
+    segment === ".." ||
+    /[\\/]/u.test(segment) ||
+    WINDOWS_RESERVED_FILENAME_RE.test(segment)
+  ) {
+    throw new Error("Invalid runtime shared upload path segment");
+  }
+  return segment;
 }
 
 function normalizeAllowFromEntry(value: string): string {

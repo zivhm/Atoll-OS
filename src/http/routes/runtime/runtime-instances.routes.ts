@@ -90,7 +90,7 @@ export function registerRuntimeInstancesRoutes(app: FastifyInstance, deps: Runti
         const uploaded = await runtimeProvider.writeRuntimeSharedFile?.({
           runtimeType: runtimeInstance.runtimeType,
           volumeName: runtimeInstance.volumeName,
-          fileName: file.name,
+          fileName: file.relativePath,
           content: file.content
         });
         if (uploaded) {

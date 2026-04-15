@@ -6,11 +6,13 @@ import {
   buildHermesConfigYaml,
   buildHermesEnvFile,
   buildOpenClawConfigJson,
-  buildWorkspaceSeedFiles
+  buildWorkspaceSeedFiles,
+  sanitizeRuntimeSharedRelativePath
 } from "../src/runtime.js";
 import {
   parseCreateRuntimeInstanceInput,
-  parseRuntimeDiscordSettingsInput
+  parseRuntimeDiscordSettingsInput,
+  parseRuntimeSharedFilesUploadInput
 } from "../src/parsers.js";
 import type { RuntimeInstance } from "../src/store.js";
 import {
@@ -713,4 +715,95 @@ test("runtime catalog includes hermes and resolves runtime-specific image overri
   assert.equal(hermes.defaultGatewayPort, 42617);
   assert.equal(hermes.capabilities.chatAction, true);
   assert.equal(hermes.capabilities.slackBotToken, true);
+});
+
+test("parseRuntimeSharedFilesUploadInput accepts nested relative paths", () => {
+  const parsed = parseRuntimeSharedFilesUploadInput({
+    files: [
+      {
+        name: "guide.txt",
+        relativePath: "docs/setup/guide.txt",
+        contentBase64: Buffer.from("hello", "utf8").toString("base64")
+      }
+    ]
+  });
+
+  assert.equal(parsed.files.length, 1);
+  assert.equal(parsed.files[0]?.relativePath, "docs/setup/guide.txt");
+});
+
+test("parseRuntimeSharedFilesUploadInput rejects unsafe relative paths", () => {
+  assert.throws(
+    () =>
+      parseRuntimeSharedFilesUploadInput({
+        files: [
+          {
+            name: "guide.txt",
+            relativePath: "../guide.txt",
+            contentBase64: Buffer.from("hello", "utf8").toString("base64")
+          }
+        ]
+      }),
+    /invalid relativePath/u
+  );
+  assert.throws(
+    () =>
+      parseRuntimeSharedFilesUploadInput({
+        files: [
+          {
+            name: "guide.txt",
+            relativePath: "/root/guide.txt",
+            contentBase64: Buffer.from("hello", "utf8").toString("base64")
+          }
+        ]
+      }),
+    /invalid relativePath/u
+  );
+});
+
+test("parseRuntimeSharedFilesUploadInput falls back to the file name when relativePath is omitted", () => {
+  const parsed = parseRuntimeSharedFilesUploadInput({
+    files: [
+      {
+        name: "archive.zip",
+        contentBase64: Buffer.from("zip", "utf8").toString("base64")
+      }
+    ]
+  });
+
+  assert.equal(parsed.files[0]?.relativePath, "archive.zip");
+});
+
+test("parseRuntimeSharedFilesUploadInput keeps existing upload limits", () => {
+  const elevenFiles = Array.from({ length: 11 }, (_, index) => ({
+    name: `file-${index + 1}.txt`,
+    contentBase64: Buffer.from("x", "utf8").toString("base64")
+  }));
+  assert.throws(
+    () =>
+      parseRuntimeSharedFilesUploadInput({
+        files: elevenFiles
+      }),
+    /no more than 10 files/u
+  );
+
+  assert.throws(
+    () =>
+      parseRuntimeSharedFilesUploadInput({
+        files: [
+          {
+            name: "large.bin",
+            contentBase64: Buffer.alloc(5 * 1024 * 1024 + 1, 1).toString("base64")
+          }
+        ]
+      }),
+    /exceeds the 5 MB upload limit/u
+  );
+});
+
+test("sanitizeRuntimeSharedRelativePath allows nested paths and rejects traversal", () => {
+  assert.equal(sanitizeRuntimeSharedRelativePath("nested/folder/file.txt"), "nested/folder/file.txt");
+  assert.equal(sanitizeRuntimeSharedRelativePath("nested\\folder\\file.txt"), "nested/folder/file.txt");
+  assert.throws(() => sanitizeRuntimeSharedRelativePath("../file.txt"), /Invalid shared file path/u);
+  assert.throws(() => sanitizeRuntimeSharedRelativePath("/file.txt"), /Invalid shared file path/u);
 });
