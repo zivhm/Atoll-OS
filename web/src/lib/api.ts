@@ -252,6 +252,11 @@ export interface RuntimeSharedFile {
   uploadedAt: string;
 }
 
+export interface RuntimeSharedFileUploadInput {
+  file: File;
+  relativePath?: string;
+}
+
 export interface RuntimeStats {
   instanceId: string;
   messages: {
@@ -698,11 +703,12 @@ export async function listRuntimeSharedFiles(instanceId: string): Promise<Runtim
 
 export async function uploadRuntimeSharedFiles(
   instanceId: string,
-  files: File[]
+  files: RuntimeSharedFileUploadInput[]
 ): Promise<RuntimeSharedFile[]> {
   const payloadFiles = await Promise.all(
-    files.map(async (file) => ({
+    files.map(async ({ file, relativePath }) => ({
       name: file.name,
+      ...(relativePath ? { relativePath } : {}),
       contentBase64: encodeBufferAsBase64(await file.arrayBuffer()),
     }))
   );

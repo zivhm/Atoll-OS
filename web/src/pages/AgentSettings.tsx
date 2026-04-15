@@ -7,6 +7,7 @@ import {
   Bot,
   ChevronDown,
   Download,
+  File as FileIcon,
   FolderOpen,
   HeartPulse,
   Info,
@@ -86,6 +87,7 @@ import {
   updateRuntimeTelegram,
   type RuntimeChatMessage,
   type RuntimeSharedFile,
+  type RuntimeSharedFileUploadInput,
   type RuntimeSlackOnboarding,
   type RuntimeSlackOnboardingCheckResponse,
   type RuntimeCatalogItem,
@@ -114,6 +116,16 @@ import {
   parseRuntimeConfigFormState,
   type RuntimeConfigFormState,
 } from "@/lib/runtime-config";
+import {
+  chunkRuntimeSharedUploadItems,
+  extractRuntimeSharedUploadItemsFromDataTransfer,
+  normalizeRuntimeSharedUploadItemsFromFileList
+} from "@/lib/runtime-shared-upload";
+import {
+  buildRuntimeSharedFileTree,
+  listRuntimeSharedFilesInFolder,
+  type RuntimeSharedFileTreeNode,
+} from "@/lib/runtime-shared-files-tree";
 import { cn } from "@/lib/utils";
 
 const RUNTIME_REFRESH_INTERVAL_MS = 5000;
@@ -1654,8 +1666,10 @@ function SlackOnboardingPanel({
 function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; helperName: string }) {
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const folderInputRef = useRef<HTMLInputElement | null>(null);
   const [isDragActive, setIsDragActive] = useState(false);
   const [deletingFileId, setDeletingFileId] = useState<string | null>(null);
+  const [deletingFolderPath, setDeletingFolderPath] = useState<string | null>(null);
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
   const [searchValue, setSearchValue] = useState("");
   const sharedFilesQuery = useQuery({
@@ -1668,18 +1682,21 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
     if (!query) {
       return files;
     }
-    return files.filter((file) => file.name.toLowerCase().includes(query));
+    return files.filter((file) => file.relativePath.toLowerCase().includes(query));
   }, [searchValue, sharedFilesQuery.data]);
+  const filteredFileTree = useMemo(() => buildRuntimeSharedFileTree(filteredFiles), [filteredFiles]);
+
+  useEffect(() => {
+    const input = folderInputRef.current;
+    if (!input) {
+      return;
+    }
+    input.setAttribute("webkitdirectory", "");
+    input.setAttribute("directory", "");
+  }, []);
 
   const uploadMutation = useMutation({
-    mutationFn: async (files: File[]) => uploadRuntimeSharedFiles(instanceId, files),
-    onSuccess: async (_, files) => {
-      toast.success(files.length === 1 ? "Shared file uploaded" : "Shared files uploaded");
-      await queryClient.invalidateQueries({ queryKey: ["runtime-shared-files", instanceId] });
-    },
-    onError: (error) => {
-      toast.error(getErrorMessage(error, "Could not upload shared files"));
-    },
+    mutationFn: async (files: RuntimeSharedFileUploadInput[]) => uploadRuntimeSharedFiles(instanceId, files),
   });
 
   const deleteMutation = useMutation({
@@ -1699,23 +1716,41 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
     },
   });
 
-  const handleFiles = async (files: File[]) => {
+  const handleFiles = async (files: RuntimeSharedFileUploadInput[]) => {
     if (files.length === 0) {
       return;
     }
-    await uploadMutation.mutateAsync(files);
+    const batches = chunkRuntimeSharedUploadItems(files);
+    try {
+      let uploadedCount = 0;
+      for (const batch of batches) {
+        await uploadMutation.mutateAsync(batch);
+        uploadedCount += batch.length;
+      }
+      toast.success(uploadedCount === 1 ? "Shared file uploaded" : "Shared files uploaded");
+      await queryClient.invalidateQueries({ queryKey: ["runtime-shared-files", instanceId] });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not upload shared files"));
+    }
   };
 
   const handleFileInputChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files ?? []);
+    const files = normalizeRuntimeSharedUploadItemsFromFileList(event.target.files ?? []);
     event.target.value = "";
     void handleFiles(files);
   };
 
-  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+  const handleFolderInputChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = normalizeRuntimeSharedUploadItemsFromFileList(event.target.files ?? []);
+    event.target.value = "";
+    void handleFiles(files);
+  };
+
+  const handleDrop = async (event: DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     setIsDragActive(false);
-    void handleFiles(Array.from(event.dataTransfer.files ?? []));
+    const files = await extractRuntimeSharedUploadItemsFromDataTransfer(event.dataTransfer);
+    await handleFiles(files);
   };
 
   const handleDownload = async (file: RuntimeSharedFile) => {
@@ -1737,6 +1772,42 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
     }
   };
 
+  const handleDeleteFolder = async (folderPath: string) => {
+    const allFiles = sharedFilesQuery.data ?? [];
+    const filesInFolder = listRuntimeSharedFilesInFolder(allFiles, folderPath);
+    if (filesInFolder.length === 0) {
+      toast.error("Folder is empty");
+      return;
+    }
+
+    const deleteConfirmed =
+      typeof window === "undefined"
+        ? true
+        : window.confirm(
+            `Delete folder "${folderPath}" and ${filesInFolder.length} file${filesInFolder.length === 1 ? "" : "s"}?`
+          );
+    if (!deleteConfirmed) {
+      return;
+    }
+
+    setDeletingFolderPath(folderPath);
+    try {
+      for (const file of filesInFolder) {
+        await deleteRuntimeSharedFile(instanceId, file.relativePath);
+      }
+      toast.success(
+        filesInFolder.length === 1
+          ? "Folder deleted (1 file removed)"
+          : `Folder deleted (${filesInFolder.length} files removed)`
+      );
+      await queryClient.invalidateQueries({ queryKey: ["runtime-shared-files", instanceId] });
+    } catch (error) {
+      toast.error(getErrorMessage(error, "Could not delete the folder"));
+    } finally {
+      setDeletingFolderPath(null);
+    }
+  };
+
   return (
     <div className="space-y-4">
       <input
@@ -1746,6 +1817,13 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
         className="hidden"
         onChange={handleFileInputChange}
       />
+      <input
+        ref={folderInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        onChange={handleFolderInputChange}
+      />
 
       <Card>
         <CardHeader className="gap-4 border-b border-border/70">
@@ -1753,7 +1831,7 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
             <div className="space-y-1">
               <CardTitle className="text-lg">Upload Files</CardTitle>
               <p className="text-sm text-muted-foreground">
-                Keep shared files with {helperName} here. Files stay with the helper across restarts.
+                Keep shared files with {helperName} here. Files stay with the helper across restarts and keep their folder paths.
               </p>
             </div>
             <div className="flex w-full flex-col gap-3 sm:flex-row lg:w-auto">
@@ -1774,6 +1852,16 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
               >
                 {uploadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
                 Choose files
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={uploadMutation.isPending}
+                onClick={() => folderInputRef.current?.click()}
+              >
+                {uploadMutation.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <FolderOpen className="h-4 w-4" />}
+                Choose folder
               </Button>
             </div>
           </div>
@@ -1800,7 +1888,7 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
           >
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="space-y-1">
-                <p className="font-medium">Drag files here or choose them from disk</p>
+                <p className="font-medium">Drag files or folders here, or choose them from disk</p>
               </div>
             </div>
           </div>
@@ -1820,57 +1908,15 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
           {!sharedFilesQuery.isLoading && !sharedFilesQuery.isError ? (
             <div className="space-y-3">
               {filteredFiles.length ? (
-                filteredFiles.map((file) => (
-                  <div
-                    key={file.id}
-                    className="flex flex-col gap-4 rounded-3xl border border-border/70 bg-background/80 px-5 py-4 md:flex-row md:items-center md:justify-between"
-                  >
-                    <div className="flex min-w-0 items-start gap-4">
-                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-border/70 bg-muted/35">
-                        <FolderOpen className="h-5 w-5 text-muted-foreground" />
-                      </div>
-                      <div className="min-w-0 space-y-1">
-                        <p className="truncate text-base font-medium">{file.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {formatFileSize(file.sizeBytes)} · Added {formatRelativeDate(file.uploadedAt)}
-                        </p>
-                        <p className="truncate text-xs text-muted-foreground">{file.relativePath}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        disabled={downloadingFileId === file.id}
-                        onClick={() => void handleDownload(file)}
-                      >
-                        {downloadingFileId === file.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Download className="h-4 w-4" />
-                        )}
-                        Download
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        disabled={deletingFileId === file.id}
-                        onClick={() => void deleteMutation.mutateAsync(file)}
-                      >
-                        {deletingFileId === file.id ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4" />
-                        )}
-                        Delete
-                      </Button>
-                    </div>
-                  </div>
-                ))
+                <RuntimeSharedFilesTree
+                  root={filteredFileTree}
+                  deletingFileId={deletingFileId}
+                  deletingFolderPath={deletingFolderPath}
+                  downloadingFileId={downloadingFileId}
+                  onDownload={handleDownload}
+                  onDelete={(file) => void deleteMutation.mutateAsync(file)}
+                  onDeleteFolder={(folderPath) => void handleDeleteFolder(folderPath)}
+                />
               ) : sharedFilesQuery.data?.length ? (
                 <div className="rounded-2xl border border-border/70 bg-background/70 p-4 text-sm text-muted-foreground">
                   No files match this search.
@@ -1884,6 +1930,158 @@ function SharedFilesPanel({ instanceId, helperName }: { instanceId: string; help
           ) : null}
         </CardContent>
       </Card>
+    </div>
+  );
+}
+
+function RuntimeSharedFilesTree({
+  root,
+  deletingFileId,
+  deletingFolderPath,
+  downloadingFileId,
+  onDownload,
+  onDelete,
+  onDeleteFolder,
+}: {
+  root: RuntimeSharedFileTreeNode;
+  deletingFileId: string | null;
+  deletingFolderPath: string | null;
+  downloadingFileId: string | null;
+  onDownload: (file: RuntimeSharedFile) => Promise<void> | void;
+  onDelete: (file: RuntimeSharedFile) => void;
+  onDeleteFolder: (folderPath: string) => void;
+}) {
+  return (
+    <div className="rounded-2xl border border-border/70 bg-background/70 p-3">
+      <RuntimeSharedFilesTreeNode
+        node={root}
+        deletingFileId={deletingFileId}
+        deletingFolderPath={deletingFolderPath}
+        downloadingFileId={downloadingFileId}
+        onDownload={onDownload}
+        onDelete={onDelete}
+        onDeleteFolder={onDeleteFolder}
+        depth={0}
+      />
+    </div>
+  );
+}
+
+function RuntimeSharedFilesTreeNode({
+  node,
+  deletingFileId,
+  deletingFolderPath,
+  downloadingFileId,
+  onDownload,
+  onDelete,
+  onDeleteFolder,
+  depth,
+}: {
+  node: RuntimeSharedFileTreeNode;
+  deletingFileId: string | null;
+  deletingFolderPath: string | null;
+  downloadingFileId: string | null;
+  onDownload: (file: RuntimeSharedFile) => Promise<void> | void;
+  onDelete: (file: RuntimeSharedFile) => void;
+  onDeleteFolder: (folderPath: string) => void;
+  depth: number;
+}) {
+  return (
+    <div className="space-y-1">
+      {node.folders.map((folder) => (
+        <details key={folder.path} open>
+          <summary
+            className="flex cursor-pointer list-none items-center gap-2 rounded-lg px-2 py-1 text-sm font-medium hover:bg-muted/40"
+            style={{ paddingLeft: `${depth * 18 + 8}px` }}
+          >
+            <FolderOpen className="h-4 w-4 text-muted-foreground" />
+            <span className="truncate">{folder.name}</span>
+            <div className="ml-auto">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="gap-2"
+                disabled={Boolean(deletingFolderPath)}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onDeleteFolder(folder.path);
+                }}
+              >
+                {deletingFolderPath === folder.path ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                Delete folder
+              </Button>
+            </div>
+          </summary>
+          <div className="space-y-1">
+            <RuntimeSharedFilesTreeNode
+              node={folder}
+              deletingFileId={deletingFileId}
+              deletingFolderPath={deletingFolderPath}
+              downloadingFileId={downloadingFileId}
+              onDownload={onDownload}
+              onDelete={onDelete}
+              onDeleteFolder={onDeleteFolder}
+              depth={depth + 1}
+            />
+          </div>
+        </details>
+      ))}
+      {node.files.map((file) => (
+        <div
+          key={file.id}
+          className="flex flex-col gap-2 rounded-lg px-2 py-2 hover:bg-muted/30 sm:flex-row sm:items-center sm:justify-between"
+          style={{ paddingLeft: `${depth * 18 + 8}px` }}
+        >
+          <div className="min-w-0">
+            <div className="flex min-w-0 items-center gap-2">
+              <FileIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+              <p className="truncate text-sm font-medium">{file.name}</p>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">
+              {formatFileSize(file.sizeBytes)} · Added {formatRelativeDate(file.uploadedAt)}
+            </p>
+            <p className="truncate text-xs text-muted-foreground">{file.relativePath}</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={downloadingFileId === file.id || Boolean(deletingFolderPath)}
+              onClick={() => void onDownload(file)}
+            >
+              {downloadingFileId === file.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4" />
+              )}
+              Download
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-2"
+              disabled={deletingFileId === file.id || Boolean(deletingFolderPath)}
+              onClick={() => onDelete(file)}
+            >
+              {deletingFileId === file.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+              Delete
+            </Button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
