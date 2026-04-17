@@ -8,6 +8,7 @@ export type RuntimePresetMode = "exact" | "translated";
 export type RuntimeChatTransport = "openclaw-gateway" | "http-message" | "openai-chat-completions";
 export type RuntimeConfigFieldKind = "string" | "number" | "boolean" | "json";
 export type SettingsConfigFieldKind = "text" | "boolean" | "select";
+export type AgentInstalledSkillSourceKind = "manual" | "preset" | "curated" | "legacy";
 
 export interface RuntimeConnectorCapabilities {
   llmConfig: boolean;
@@ -148,6 +149,7 @@ export interface Agent {
   avatar?: AgentAvatar;
   agentType: "general" | "frontend" | "backend";
   skills: string[];
+  installedSkills: AgentInstalledSkill[];
   roleTitle?: string;
   presetId?: string;
   presetName?: string;
@@ -156,6 +158,39 @@ export interface Agent {
   channel: Channel;
   status: "running" | "paused";
   createdAt: string;
+}
+
+export interface AgentInstalledSkill {
+  key: string;
+  ref: string;
+  label: string;
+  sourceKind: AgentInstalledSkillSourceKind;
+  installedAt: string;
+  updatedAt: string;
+}
+
+export interface AgentSkillCatalogItem {
+  key: string;
+  ref: string;
+  label: string;
+  installed: boolean;
+  enabled: boolean;
+  sourcePresets: Array<{
+    presetId: string;
+    presetName: string;
+  }>;
+}
+
+export interface AgentSkillCatalogResponse {
+  items: AgentSkillCatalogItem[];
+}
+
+export interface UpdateAgentResponse {
+  agent: Agent;
+  workspaceSync: {
+    status: "unchanged" | "synced" | "deferred";
+    message: string;
+  };
 }
 
 export interface AgentAvatar {
@@ -654,6 +689,7 @@ export async function createAgent(input: {
   avatar?: AgentAvatar;
   agentType?: Agent["agentType"];
   skills?: string[];
+  installedSkills?: AgentInstalledSkill[];
   roleTitle?: string;
   presetId?: string;
   channel: Channel;
@@ -671,12 +707,21 @@ export async function updateAgent(
     roleTitle?: string;
     status?: Agent["status"];
     avatar?: AgentAvatar;
+    skills?: string[];
+    installedSkills?: AgentInstalledSkill[];
   }
-): Promise<Agent> {
-  return apiRequest<Agent>(`/api/agents/${encodeURIComponent(agentId)}`, {
+): Promise<UpdateAgentResponse> {
+  return apiRequest<UpdateAgentResponse>(`/api/agents/${encodeURIComponent(agentId)}`, {
     method: "POST",
     body: input,
   });
+}
+
+export async function getAgentSkillsCatalog(agentId: string): Promise<AgentSkillCatalogItem[]> {
+  const response = await apiRequest<AgentSkillCatalogResponse>(
+    `/api/agents/${encodeURIComponent(agentId)}/skills/catalog`
+  );
+  return response.items;
 }
 
 export async function listRuntimeInstances(tenantId?: string): Promise<RuntimeInstance[]> {

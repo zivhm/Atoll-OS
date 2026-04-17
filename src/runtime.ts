@@ -2,6 +2,7 @@ import { execFile, spawn } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { promisify } from "node:util";
 
+import type { AgentInstalledSkill } from "./agent-skills.js";
 import {
   getRuntimeConnector,
   getRuntimeDescriptor,
@@ -74,6 +75,7 @@ export type RuntimeWorkspaceProfile = {
   agentType?: string;
   agentTypeName?: string;
   skills?: string[];
+  installedSkills?: AgentInstalledSkill[];
   sharedWorkspacePath?: string;
   presetId?: string;
   presetName?: string;
@@ -131,9 +133,16 @@ export type WriteRuntimeConfigInput = {
   runtimeSecrets?: Record<string, string>;
 };
 
+export type SyncRuntimeSkillArtifactsInput = {
+  runtimeType?: RuntimeType;
+  volumeName: string;
+  workspaceProfile?: RuntimeWorkspaceProfile;
+};
+
 export type RuntimeOps = {
   provisionRuntimeContainer: (input: ProvisionRuntimeContainerInput) => Promise<void>;
   writeRuntimeConfig: (input: WriteRuntimeConfigInput) => Promise<void>;
+  syncRuntimeSkillArtifacts: (input: SyncRuntimeSkillArtifactsInput) => Promise<void>;
   restartRuntimeContainer: (containerName: string) => Promise<void>;
   startRuntimeContainer: (containerName: string) => Promise<void>;
   stopRuntimeContainer: (containerName: string) => Promise<void>;
@@ -256,6 +265,7 @@ export type RuntimeSharedFile = {
 export const runtimeOps: RuntimeOps = {
   provisionRuntimeContainer,
   writeRuntimeConfig,
+  syncRuntimeSkillArtifacts,
   restartRuntimeContainer,
   startRuntimeContainer,
   stopRuntimeContainer,
@@ -459,6 +469,11 @@ export async function writeRuntimeConfig(input: WriteRuntimeConfigInput): Promis
       ],
       `seed runtime config for volume ${input.volumeName}`
     );
+    await syncRuntimeSkillArtifacts({
+      runtimeType,
+      volumeName: input.volumeName,
+      workspaceProfile: input.workspaceProfile
+    });
     return;
   }
 
@@ -528,6 +543,11 @@ export async function writeRuntimeConfig(input: WriteRuntimeConfigInput): Promis
       ],
       `seed runtime config for volume ${input.volumeName}`
     );
+    await syncRuntimeSkillArtifacts({
+      runtimeType,
+      volumeName: input.volumeName,
+      workspaceProfile: input.workspaceProfile
+    });
     return;
   }
 
@@ -575,6 +595,11 @@ export async function writeRuntimeConfig(input: WriteRuntimeConfigInput): Promis
     ],
     `seed runtime config for volume ${input.volumeName}`
   );
+  await syncRuntimeSkillArtifacts({
+    runtimeType,
+    volumeName: input.volumeName,
+    workspaceProfile: input.workspaceProfile
+  });
 }
 
 export async function restartRuntimeContainer(containerName: string): Promise<void> {
@@ -1318,6 +1343,252 @@ function buildRuntimeSeedCommands(input: {
   return commands;
 }
 
+const USER_SKILLS_MANAGED_START = "<!-- ATOLL:MANAGED-SKILLS:USER:START -->";
+const USER_SKILLS_MANAGED_END = "<!-- ATOLL:MANAGED-SKILLS:USER:END -->";
+const TOOLS_SKILLS_MANAGED_START = "<!-- ATOLL:MANAGED-SKILLS:TOOLS:START -->";
+const TOOLS_SKILLS_MANAGED_END = "<!-- ATOLL:MANAGED-SKILLS:TOOLS:END -->";
+
+export function buildRuntimeSkillsLockJson(profile?: RuntimeWorkspaceProfile): string {
+  const payload = {
+    version: 1 as const,
+    helper: {
+      name: normalizeProfileValue(profile?.helperName, "Atoll Helper"),
+      ...(profile?.presetId?.trim() ? { presetId: profile.presetId.trim() } : {}),
+      ...(profile?.presetName?.trim() ? { presetName: profile.presetName.trim() } : {})
+    },
+    enabledSkills: resolveWorkspaceEnabledSkills(profile),
+    installedSkills: resolveWorkspaceInstalledSkills(profile)
+  };
+
+  return `${JSON.stringify(payload, null, 2)}\n`;
+}
+
+export function renderRuntimeSkillArtifacts(input: {
+  runtimeType?: RuntimeType;
+  workspaceProfile?: RuntimeWorkspaceProfile;
+  userMarkdown?: string;
+  toolsMarkdown?: string;
+}): {
+  userMarkdown: string;
+  toolsMarkdown: string;
+  skillsLockJson: string;
+} {
+  const runtimeType = normalizeRuntimeType(input.runtimeType);
+  const seeded = resolveWorkspaceSeedFiles(runtimeType, input.workspaceProfile);
+
+  return {
+    userMarkdown: upsertManagedMarkdownBlock(
+      input.userMarkdown ?? seeded.userMarkdown,
+      USER_SKILLS_MANAGED_START,
+      USER_SKILLS_MANAGED_END,
+      buildManagedUserSkillsMarkdown(input.workspaceProfile),
+      /^## Onboarding Status\b/mu
+    ),
+    toolsMarkdown: upsertManagedMarkdownBlock(
+      input.toolsMarkdown ?? seeded.toolsMarkdown,
+      TOOLS_SKILLS_MANAGED_START,
+      TOOLS_SKILLS_MANAGED_END,
+      buildManagedToolsSkillsMarkdown(input.workspaceProfile)
+    ),
+    skillsLockJson: buildRuntimeSkillsLockJson(input.workspaceProfile)
+  };
+}
+
+export async function syncRuntimeSkillArtifacts(
+  input: SyncRuntimeSkillArtifactsInput
+): Promise<void> {
+  const runtimeType = normalizeRuntimeType(input.runtimeType);
+  const descriptor = getRuntimeDescriptor(runtimeType);
+  const userPath = `${descriptor.workspaceDir}/USER.md`;
+  const toolsPath = `${descriptor.workspaceDir}/TOOLS.md`;
+  const skillsLockPath = `${descriptor.workspaceDir}/skills-lock.json`;
+
+  const [userResult, toolsResult] = await Promise.all([
+    runtimeVolumeIo.readFile({
+      volumeName: input.volumeName,
+      mountPath: descriptor.dataRoot,
+      filePath: userPath,
+      label: `read runtime user profile ${input.volumeName}`
+    }),
+    runtimeVolumeIo.readFile({
+      volumeName: input.volumeName,
+      mountPath: descriptor.dataRoot,
+      filePath: toolsPath,
+      label: `read runtime tools profile ${input.volumeName}`
+    })
+  ]);
+
+  const artifacts = renderRuntimeSkillArtifacts({
+    runtimeType,
+    workspaceProfile: input.workspaceProfile,
+    ...(userResult.found ? { userMarkdown: userResult.content.toString("utf8") } : {}),
+    ...(toolsResult.found ? { toolsMarkdown: toolsResult.content.toString("utf8") } : {})
+  });
+
+  await Promise.all([
+    runtimeVolumeIo.writeFile({
+      volumeName: input.volumeName,
+      mountPath: descriptor.dataRoot,
+      filePath: skillsLockPath,
+      content: Buffer.from(artifacts.skillsLockJson, "utf8"),
+      label: `write runtime skills lock ${input.volumeName}`
+    }),
+    runtimeVolumeIo.writeFile({
+      volumeName: input.volumeName,
+      mountPath: descriptor.dataRoot,
+      filePath: userPath,
+      content: Buffer.from(artifacts.userMarkdown, "utf8"),
+      label: `write runtime user profile ${input.volumeName}`
+    }),
+    runtimeVolumeIo.writeFile({
+      volumeName: input.volumeName,
+      mountPath: descriptor.dataRoot,
+      filePath: toolsPath,
+      content: Buffer.from(artifacts.toolsMarkdown, "utf8"),
+      label: `write runtime tools profile ${input.volumeName}`
+    })
+  ]);
+
+  await applyRuntimeWorkspaceFilePermissions({
+    descriptor,
+    volumeName: input.volumeName,
+    filePaths: [skillsLockPath, userPath, toolsPath]
+  });
+}
+
+function resolveWorkspaceEnabledSkills(profile?: RuntimeWorkspaceProfile): string[] {
+  return (profile?.skills ?? [])
+    .map((skill) => normalizeProfileValue(skill, ""))
+    .filter(Boolean);
+}
+
+function resolveWorkspaceInstalledSkills(profile?: RuntimeWorkspaceProfile): AgentInstalledSkill[] {
+  return (profile?.installedSkills ?? [])
+    .filter((skill): skill is AgentInstalledSkill => Boolean(skill?.key && skill?.ref))
+    .map((skill) => ({
+      key: normalizeProfileValue(skill.key, ""),
+      ref: normalizeProfileValue(skill.ref, ""),
+      label: normalizeProfileValue(skill.label, skill.key),
+      sourceKind: skill.sourceKind,
+      installedAt: normalizeProfileValue(skill.installedAt, ""),
+      updatedAt: normalizeProfileValue(skill.updatedAt, "")
+    }))
+    .filter((skill) => Boolean(skill.key && skill.ref));
+}
+
+function buildManagedUserSkillsMarkdown(profile?: RuntimeWorkspaceProfile): string {
+  const enabledSkills = resolveWorkspaceEnabledSkills(profile);
+  const installedSkills = resolveWorkspaceInstalledSkills(profile);
+  const agentTypeName = normalizeProfileValue(profile?.agentTypeName, "");
+
+  return [
+    "## Managed Skill State",
+    "",
+    ...(agentTypeName ? [`- Agent type: ${agentTypeName}`] : []),
+    "- Enabled skills (ordered):",
+    ...(enabledSkills.length > 0 ? enabledSkills.map((skill) => `  - ${skill}`) : ["  - None enabled."]),
+    "",
+    "- Installed skills:",
+    ...(installedSkills.length > 0
+      ? installedSkills.map(
+          (skill) => `  - ${skill.label} (\`${skill.key}\`) · ${skill.sourceKind} · ${skill.ref}`
+        )
+      : ["  - None installed."]),
+    "",
+    "- Canonical artifact: `skills-lock.json` in the workspace root."
+  ].join("\n");
+}
+
+function buildManagedToolsSkillsMarkdown(profile?: RuntimeWorkspaceProfile): string {
+  const enabledSkills = resolveWorkspaceEnabledSkills(profile);
+  const installedSkills = resolveWorkspaceInstalledSkills(profile);
+
+  return [
+    "## Atoll Managed Skills",
+    "",
+    "Treat this block and `skills-lock.json` as the current helper skill configuration.",
+    "",
+    "### Effective Skills",
+    "",
+    ...(enabledSkills.length > 0
+      ? enabledSkills.map((skill) => `- ${skill}`)
+      : ["- No skills are currently enabled."]),
+    "",
+    "### Installed Skills",
+    "",
+    ...(installedSkills.length > 0
+      ? installedSkills.map(
+          (skill) => `- ${skill.label} (\`${skill.key}\`) · ${skill.sourceKind} · ${skill.ref}`
+        )
+      : ["- No skills are currently installed."])
+  ].join("\n");
+}
+
+function upsertManagedMarkdownBlock(
+  markdown: string,
+  startMarker: string,
+  endMarker: string,
+  body: string,
+  insertBefore?: RegExp
+): string {
+  const block = [startMarker, body.trim(), endMarker].join("\n");
+  const pattern = new RegExp(`${escapeRegExp(startMarker)}[\\s\\S]*?${escapeRegExp(endMarker)}`, "u");
+  if (pattern.test(markdown)) {
+    return ensureTrailingNewline(markdown.replace(pattern, block));
+  }
+
+  if (insertBefore) {
+    const match = insertBefore.exec(markdown);
+    if (match && Number.isInteger(match.index)) {
+      const before = markdown.slice(0, match.index).trimEnd();
+      const after = markdown.slice(match.index).trimStart();
+      return ensureTrailingNewline(`${before}\n\n${block}\n\n${after}`);
+    }
+  }
+
+  const trimmed = markdown.trimEnd();
+  return ensureTrailingNewline(trimmed ? `${trimmed}\n\n${block}` : block);
+}
+
+function ensureTrailingNewline(value: string): string {
+  return value.endsWith("\n") ? value : `${value}\n`;
+}
+
+async function applyRuntimeWorkspaceFilePermissions(input: {
+  descriptor: RuntimeDescriptor;
+  volumeName: string;
+  filePaths: string[];
+}): Promise<void> {
+  const filePaths = input.filePaths.map((filePath) => toShellSingleQuoted(filePath)).join(" ");
+  const commands: string[] = [];
+  if (input.descriptor.seedOwner) {
+    commands.push(`chown ${input.descriptor.seedOwner} ${filePaths}`);
+  }
+  if (input.descriptor.seedPermissions?.workspaceFileMode) {
+    commands.push(
+      `chmod ${input.descriptor.seedPermissions.workspaceFileMode} ${filePaths} 2>/dev/null || true`
+    );
+  }
+  if (commands.length === 0) {
+    return;
+  }
+
+  await runDocker(
+    [
+      "run",
+      "--rm",
+      "--entrypoint",
+      "sh",
+      "-v",
+      `${input.volumeName}:${input.descriptor.dataRoot}`,
+      CONFIG_SEED_IMAGE,
+      "-lc",
+      commands.join(" && ")
+    ],
+    `fix runtime skill artifact permissions for volume ${input.volumeName}`
+  );
+}
+
 function buildWorkspaceIdentityMarkdown(profile?: RuntimeWorkspaceProfile): string {
   const helperName = normalizeProfileValue(profile?.helperName, "Atoll Helper");
   const helperStyle = normalizeProfileValue(profile?.helperStyle, "Helpful, pragmatic, concise");
@@ -1405,12 +1676,8 @@ function buildWorkspaceUserMarkdown(profile?: RuntimeWorkspaceProfile): string {
   const presetName = normalizeProfileValue(profile?.presetName, "");
   const presetSourcePath = normalizeProfileValue(profile?.presetSourcePath, "");
   const presetSummary = normalizeProfileValue(profile?.presetSummary, "");
-  const agentTypeName = normalizeProfileValue(profile?.agentTypeName, "");
-  const skills = (profile?.skills ?? [])
-    .map((skill) => normalizeProfileValue(skill, ""))
-    .filter(Boolean);
-
-  return [
+  return upsertManagedMarkdownBlock(
+    [
     "# USER.md - Workspace Context",
     "",
     `- Workspace: ${workspaceName}`,
@@ -1433,23 +1700,18 @@ function buildWorkspaceUserMarkdown(profile?: RuntimeWorkspaceProfile): string {
           ...(presetSummary ? [`- Summary: ${presetSummary}`] : [])
         ]
       : []),
-    ...(skills.length > 0
-      ? [
-          "",
-          "## Skill Profile",
-          "",
-          ...(agentTypeName ? [`- Agent type: ${agentTypeName}`] : []),
-          "- Enabled skills:",
-          ...skills.map((skill) => `  - ${skill}`)
-        ]
-      : []),
     "",
     ...buildUserOnboardingAddonMarkdown().trimEnd().split("\n"),
     "",
     "This file is seeded by Atoll during helper provisioning.",
     "After first-contact onboarding, update this file with confirmed preferences.",
     ""
-  ].join("\n");
+  ].join("\n"),
+    USER_SKILLS_MANAGED_START,
+    USER_SKILLS_MANAGED_END,
+    buildManagedUserSkillsMarkdown(profile),
+    /^## Onboarding Status\b/mu
+  );
 }
 
 function buildSoulOnboardingAddonMarkdown(): string {
@@ -1491,11 +1753,8 @@ function buildUserOnboardingAddonMarkdown(): string {
 function buildWorkspaceToolsMarkdown(profile?: RuntimeWorkspaceProfile): string {
   const presetName = normalizeProfileValue(profile?.presetName, "");
   const presetSourcePath = normalizeProfileValue(profile?.presetSourcePath, "");
-  const skills = (profile?.skills ?? [])
-    .map((skill) => normalizeProfileValue(skill, ""))
-    .filter(Boolean);
-
-  return [
+  return upsertManagedMarkdownBlock(
+    [
     "# TOOLS.md - Skill Profile",
     "",
     ...(presetName
@@ -1505,13 +1764,12 @@ function buildWorkspaceToolsMarkdown(profile?: RuntimeWorkspaceProfile): string 
           ""
         ]
       : []),
-    "## Effective Skills",
-    "",
-    ...(skills.length > 0
-      ? skills.map((skill) => `- ${skill}`)
-      : ["- No explicit skills were stored for this helper at creation time."]),
     ""
-  ].join("\n");
+  ].join("\n"),
+    TOOLS_SKILLS_MANAGED_START,
+    TOOLS_SKILLS_MANAGED_END,
+    buildManagedToolsSkillsMarkdown(profile)
+  );
 }
 
 export function buildWorkspaceSeedFiles(profile?: RuntimeWorkspaceProfile): {

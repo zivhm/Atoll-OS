@@ -1,5 +1,9 @@
 import type { FastifyInstance, FastifyRequest } from "fastify";
 
+import {
+  buildAgentSkillCatalog,
+  buildInstalledSkillsFromRefs
+} from "../../agent-skills.js";
 import { listAgentTypes } from "../../agent-types.js";
 import {
   buildAgentPresetExportSnapshot,
@@ -16,6 +20,8 @@ import {
   parseCreateTenantInput,
   parseUpdateAgentInput
 } from "../../parsers.js";
+import type { RuntimeProvider } from "../../runtime-provider.js";
+import { resolveRuntimeWorkspaceProfile } from "../../runtime-workspace-profile.js";
 import type { Agent, Store } from "../../store.js";
 
 type AuthContext = {
@@ -28,9 +34,10 @@ export function registerTenantAgentRoutes(
   deps: {
     store: Store;
     getAuthContextOrThrow: (request: FastifyRequest) => AuthContext;
+    runtimeProvider?: RuntimeProvider;
   }
 ): void {
-  const { store, getAuthContextOrThrow } = deps;
+  const { store, getAuthContextOrThrow, runtimeProvider } = deps;
 
   app.get("/api/agent-types", async () => {
     return {
@@ -211,6 +218,8 @@ export function registerTenantAgentRoutes(
 
     const agent = store.createAgent({
       ...input,
+      installedSkills:
+        input.installedSkills ?? buildInstalledSkillsFromRefs(preset?.recommendedSkills, "preset"),
       presetId: preset?.id,
       presetName: preset?.name,
       presetSourcePath: preset?.sourcePath,
@@ -221,6 +230,32 @@ export function registerTenantAgentRoutes(
       presetSoulTemplateMarkdown: undefined
     });
     return reply.status(201).send(toPublicAgent(agent));
+  });
+
+  app.get("/api/agents/:agentId/skills/catalog", async (request, reply) => {
+    const auth = getAuthContextOrThrow(request);
+    const params = parseAgentParams(request.params);
+    const agent = store.getAgent(params.agentId);
+    if (!agent) {
+      return reply.status(404).send({
+        message: `Agent ${params.agentId} not found`
+      });
+    }
+
+    const tenant = store.getTenant(agent.tenantId);
+    if (!tenant || tenant.identityOrgId !== auth.orgId) {
+      return reply.status(404).send({
+        message: `Agent ${params.agentId} not found`
+      });
+    }
+
+    return {
+      items: buildAgentSkillCatalog({
+        presets: store.listAgentPresets({ activeOnly: true }),
+        installedSkills: agent.installedSkills,
+        enabledSkills: agent.skills
+      })
+    };
   });
 
   app.post("/api/agents/:agentId", async (request, reply) => {
@@ -242,7 +277,45 @@ export function registerTenantAgentRoutes(
     }
 
     const updated = store.updateAgent(params.agentId, input);
-    return toPublicAgent(updated ?? agent);
+    const publicAgent = toPublicAgent(updated ?? agent);
+    const requestedSkillStateChange =
+      input.skills !== undefined || input.installedSkills !== undefined;
+    let workspaceSync:
+      | {
+          status: "unchanged" | "synced" | "deferred";
+          message: string;
+        }
+      | undefined;
+
+    if (requestedSkillStateChange) {
+      const runtimeInstance = store.getRuntimeInstanceForAgent(publicAgent.id);
+      if (runtimeInstance && runtimeProvider?.syncRuntimeSkillArtifacts) {
+        await runtimeProvider.syncRuntimeSkillArtifacts({
+          runtimeType: runtimeInstance.runtimeType,
+          volumeName: runtimeInstance.volumeName,
+          workspaceProfile: resolveRuntimeWorkspaceProfile(store, runtimeInstance)
+        });
+        workspaceSync = {
+          status: "synced",
+          message: "Workspace skill artifacts were updated for the active runtime."
+        };
+      } else {
+        workspaceSync = {
+          status: "deferred",
+          message: "No runtime exists yet. Skill artifacts will materialize during the next provision."
+        };
+      }
+    } else {
+      workspaceSync = {
+        status: "unchanged",
+        message: "No skill lifecycle changes were requested."
+      };
+    }
+
+    return {
+      agent: publicAgent,
+      workspaceSync
+    };
   });
 }
 

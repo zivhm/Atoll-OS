@@ -3,6 +3,10 @@ import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "
 import { dirname, resolve } from "node:path";
 
 import { DEFAULT_AGENT_TYPE_ID, normalizeAgentSkills, normalizeAgentTypeId, type AgentTypeId } from "./agent-types.js";
+import {
+  resolveAgentSkillState,
+  type AgentInstalledSkill
+} from "./agent-skills.js";
 import { buildInitialAgentPresetCatalog, type AgentPresetCatalogItem } from "./agent-presets.js";
 import { normalizeIdentityColorToken } from "./identity-colors.js";
 
@@ -49,6 +53,7 @@ export type Agent = {
   avatar?: AgentAvatar;
   agentType: AgentTypeId;
   skills: string[];
+  installedSkills: AgentInstalledSkill[];
   roleTitle?: string;
   presetId?: string;
   presetName?: string;
@@ -69,6 +74,7 @@ export type CreateAgentInput = {
   avatar?: AgentAvatar;
   agentType?: AgentTypeId;
   skills?: string[];
+  installedSkills?: AgentInstalledSkill[];
   roleTitle?: string;
   presetId?: string;
   presetName?: string;
@@ -81,7 +87,9 @@ export type CreateAgentInput = {
   channel: Channel;
 };
 
-type UpdateAgentPatch = Partial<Pick<Agent, "name" | "roleTitle" | "status" | "avatar">>;
+type UpdateAgentPatch = Partial<
+  Pick<Agent, "name" | "roleTitle" | "status" | "avatar" | "skills" | "installedSkills">
+>;
 
 export const RUNTIME_INSTANCE_STATUSES = [
   "provisioning",
@@ -529,7 +537,10 @@ export function createStore(options: StoreOptions) {
       name: input.name,
       avatar: normalizeAgentAvatar(input.avatar),
       agentType: normalizeAgentTypeId(input.agentType),
-      skills: normalizeAgentSkills(input.skills),
+      ...resolveAgentSkillState({
+        skills: input.skills,
+        installedSkills: input.installedSkills
+      }),
       roleTitle: input.roleTitle?.trim() || undefined,
       presetId: input.presetId?.trim() || undefined,
       presetName: input.presetName?.trim() || undefined,
@@ -583,6 +594,10 @@ export function createStore(options: StoreOptions) {
       ...current,
       name: nextName,
       avatar: patch.avatar === undefined ? current.avatar : normalizeAgentAvatar(patch.avatar),
+      ...resolveAgentSkillState({
+        skills: patch.skills ?? current.skills,
+        installedSkills: patch.installedSkills ?? current.installedSkills
+      }),
       roleTitle:
         patch.roleTitle === undefined
           ? current.roleTitle
@@ -1431,13 +1446,17 @@ function normalizeAgentList(items: Agent[]): { items: Agent[]; changed: boolean 
       ...agent,
       avatar: normalizeAgentAvatar(agent.avatar),
       agentType: normalizeAgentTypeId(agent.agentType),
-      skills: normalizeAgentSkills(agent.skills)
+      ...resolveAgentSkillState({
+        skills: agent.skills,
+        installedSkills: agent.installedSkills
+      })
     };
 
     if (
       JSON.stringify(agent.avatar ?? null) !== JSON.stringify(nextAgent.avatar ?? null) ||
       agent.agentType !== nextAgent.agentType ||
-      JSON.stringify(agent.skills ?? []) !== JSON.stringify(nextAgent.skills)
+      JSON.stringify(agent.skills ?? []) !== JSON.stringify(nextAgent.skills) ||
+      JSON.stringify(agent.installedSkills ?? []) !== JSON.stringify(nextAgent.installedSkills)
     ) {
       changed = true;
     }

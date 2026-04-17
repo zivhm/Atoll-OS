@@ -3,6 +3,7 @@ import type {
   ProvisionRuntimeContainerInput,
   RuntimeRecoveredIdentity,
   RuntimeSharedFile,
+  SyncRuntimeSkillArtifactsInput,
   RuntimeEnvironmentDiagnostics,
   RuntimeEnvironmentDiagnosticsInput,
   RuntimeOps,
@@ -18,6 +19,7 @@ export type RuntimeProvider = {
   ) => Promise<RuntimeEnvironmentDiagnostics>;
   provisionRuntimeContainer: (input: ProvisionRuntimeContainerInput) => Promise<void>;
   writeRuntimeConfig: (input: WriteRuntimeConfigInput) => Promise<void>;
+  syncRuntimeSkillArtifacts?: (input: SyncRuntimeSkillArtifactsInput) => Promise<void>;
   restartRuntimeContainer: (containerName: string) => Promise<void>;
   startRuntimeContainer: (containerName: string) => Promise<void>;
   stopRuntimeContainer: (containerName: string) => Promise<void>;
@@ -77,6 +79,7 @@ export function createLocalRuntimeProvider(runtimeOps: RuntimeOps): RuntimeProvi
     checkPrereqs: (input) => runtimeOps.getRuntimeEnvironmentDiagnostics(input),
     provisionRuntimeContainer: (input) => runtimeOps.provisionRuntimeContainer(input),
     writeRuntimeConfig: (input) => runtimeOps.writeRuntimeConfig(input),
+    syncRuntimeSkillArtifacts: (input) => runtimeOps.syncRuntimeSkillArtifacts(input),
     restartRuntimeContainer: (containerName) => runtimeOps.restartRuntimeContainer(containerName),
     startRuntimeContainer: (containerName) => runtimeOps.startRuntimeContainer(containerName),
     stopRuntimeContainer: (containerName) => runtimeOps.stopRuntimeContainer(containerName),

@@ -6,7 +6,9 @@ import {
   buildHermesConfigYaml,
   buildHermesEnvFile,
   buildOpenClawConfigJson,
+  buildRuntimeSkillsLockJson,
   buildWorkspaceSeedFiles,
+  renderRuntimeSkillArtifacts,
   sanitizeRuntimeSharedRelativePath
 } from "../src/runtime.js";
 import {
@@ -380,7 +382,152 @@ test("business identity presets preserve the onboarding placeholder and generic 
   assert.match(seeded.userMarkdown, /## Preset Profile/u);
   assert.match(seeded.userMarkdown, /business-identities\/project-manager/u);
   assert.match(seeded.toolsMarkdown, /# TOOLS\.md/u);
-  assert.match(seeded.toolsMarkdown, /No explicit skills were stored for this helper at creation time/u);
+  assert.match(seeded.toolsMarkdown, /Atoll Managed Skills/u);
+  assert.match(seeded.toolsMarkdown, /skills-lock\.json/u);
+});
+
+test("buildRuntimeSkillsLockJson writes enabled and installed helper skill state", () => {
+  const lockJson = buildRuntimeSkillsLockJson({
+    workspaceName: "Ops Workspace",
+    helperName: "Nora",
+    presetId: "project-manager",
+    presetName: "Project Manager",
+    skills: ["writing-plans", "brainstorming"],
+    installedSkills: [
+      {
+        key: "writing-plans",
+        ref: "https://skills.sh/obra/superpowers/writing-plans",
+        label: "Writing Plans",
+        sourceKind: "preset",
+        installedAt: "2026-04-17T09:00:00.000Z",
+        updatedAt: "2026-04-17T09:00:00.000Z"
+      },
+      {
+        key: "brainstorming",
+        ref: "https://skills.sh/obra/superpowers/brainstorming",
+        label: "Brainstorming",
+        sourceKind: "manual",
+        installedAt: "2026-04-17T09:05:00.000Z",
+        updatedAt: "2026-04-17T09:05:00.000Z"
+      }
+    ]
+  });
+
+  const payload = JSON.parse(lockJson) as {
+    version: number;
+    helper: { name: string; presetId?: string };
+    enabledSkills: string[];
+    installedSkills: Array<{ key: string; sourceKind: string }>;
+  };
+
+  assert.equal(payload.version, 1);
+  assert.equal(payload.helper.name, "Nora");
+  assert.equal(payload.helper.presetId, "project-manager");
+  assert.deepEqual(payload.enabledSkills, ["writing-plans", "brainstorming"]);
+  assert.deepEqual(
+    payload.installedSkills.map((skill) => [skill.key, skill.sourceKind]),
+    [
+      ["writing-plans", "preset"],
+      ["brainstorming", "manual"]
+    ]
+  );
+});
+
+test("renderRuntimeSkillArtifacts replaces managed skill blocks and preserves unmanaged content", () => {
+  const rendered = renderRuntimeSkillArtifacts({
+    runtimeType: "openclaw",
+    workspaceProfile: {
+      workspaceName: "Ops Workspace",
+      helperName: "Nora",
+      helperStyle: "Direct and concise",
+      agentTypeName: "General Helper",
+      skills: ["writing-plans"],
+      installedSkills: [
+        {
+          key: "writing-plans",
+          ref: "https://skills.sh/obra/superpowers/writing-plans",
+          label: "Writing Plans",
+          sourceKind: "preset",
+          installedAt: "2026-04-17T09:00:00.000Z",
+          updatedAt: "2026-04-17T09:00:00.000Z"
+        }
+      ]
+    },
+    userMarkdown: [
+      "# USER.md - Workspace Context",
+      "",
+      "Custom intro",
+      "",
+      "<!-- ATOLL:MANAGED-SKILLS:USER:START -->",
+      "outdated",
+      "<!-- ATOLL:MANAGED-SKILLS:USER:END -->",
+      "",
+      "## Onboarding Status",
+      "",
+      "- Status: confirmed",
+      "",
+      "Custom footer"
+    ].join("\n"),
+    toolsMarkdown: [
+      "# TOOLS.md - Skill Profile",
+      "",
+      "User-owned notes",
+      "",
+      "<!-- ATOLL:MANAGED-SKILLS:TOOLS:START -->",
+      "outdated",
+      "<!-- ATOLL:MANAGED-SKILLS:TOOLS:END -->",
+      "",
+      "More notes"
+    ].join("\n")
+  });
+
+  assert.match(rendered.userMarkdown, /Custom intro/u);
+  assert.match(rendered.userMarkdown, /Custom footer/u);
+  assert.doesNotMatch(rendered.userMarkdown, /outdated/u);
+  assert.match(rendered.userMarkdown, /Managed Skill State/u);
+  assert.match(rendered.userMarkdown, /writing-plans/u);
+
+  assert.match(rendered.toolsMarkdown, /User-owned notes/u);
+  assert.match(rendered.toolsMarkdown, /More notes/u);
+  assert.doesNotMatch(rendered.toolsMarkdown, /outdated/u);
+  assert.match(rendered.toolsMarkdown, /Atoll Managed Skills/u);
+  assert.match(rendered.toolsMarkdown, /Writing Plans/u);
+});
+
+test("renderRuntimeSkillArtifacts inserts managed blocks when workspace docs do not have them yet", () => {
+  const rendered = renderRuntimeSkillArtifacts({
+    runtimeType: "openclaw",
+    workspaceProfile: {
+      workspaceName: "Ops Workspace",
+      helperName: "Nora",
+      helperStyle: "Direct and concise",
+      skills: [],
+      installedSkills: []
+    },
+    userMarkdown: [
+      "# USER.md - Workspace Context",
+      "",
+      "Custom intro",
+      "",
+      "## Onboarding Status",
+      "",
+      "- Status: pending"
+    ].join("\n"),
+    toolsMarkdown: [
+      "# TOOLS.md - Skill Profile",
+      "",
+      "Custom tools preface"
+    ].join("\n")
+  });
+
+  assert.match(
+    rendered.userMarkdown,
+    /<!-- ATOLL:MANAGED-SKILLS:USER:START -->[\s\S]*Managed Skill State[\s\S]*## Onboarding Status/u
+  );
+  assert.match(
+    rendered.toolsMarkdown,
+    /Custom tools preface[\s\S]*<!-- ATOLL:MANAGED-SKILLS:TOOLS:START -->[\s\S]*Atoll Managed Skills/u
+  );
 });
 
 test("runtime descriptors expose mount, config, and workspace paths per runtime", () => {

@@ -278,7 +278,8 @@ export async function buildApp(options: BuildAppOptions = {}) {
 
   registerTenantAgentRoutes(app, {
     store,
-    getAuthContextOrThrow
+    getAuthContextOrThrow,
+    runtimeProvider
   });
 
   registerRuntimeRoutes(app, {

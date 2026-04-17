@@ -28,6 +28,7 @@ export function resolveRuntimeWorkspaceProfile(
     agentType: agentType?.id,
     agentTypeName: agentType?.name,
     skills: agent?.skills ?? [],
+    installedSkills: agent?.installedSkills ?? [],
     sharedWorkspacePath:
       tenant?.resourceMode === "shared" && tenant.sharedVolumeName
         ? SHARED_WORKSPACE_MOUNT_PATH

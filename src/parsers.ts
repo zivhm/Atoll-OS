@@ -6,6 +6,11 @@ import type {
   RuntimeType
 } from "./store.js";
 import { getAgentTypeById, normalizeAgentSkills, normalizeAgentTypeId } from "./agent-types.js";
+import {
+  normalizeInstalledSkills,
+  resolveEnabledSkillKeys,
+  type AgentInstalledSkill
+} from "./agent-skills.js";
 import { resolveIdentityColorToken } from "./identity-colors.js";
 import {
   getRuntimeConnector,
@@ -288,6 +293,7 @@ export function parseCreateAgentInput(payload: unknown): CreateAgentInput {
     presetId?: unknown;
     agentType?: unknown;
     skills?: unknown;
+    installedSkills?: unknown;
     avatar?: unknown;
     style?: unknown;
     agentRoleTitle?: unknown;
@@ -310,6 +316,11 @@ export function parseCreateAgentInput(payload: unknown): CreateAgentInput {
     throw new Error("Validation failed: skills must contain non-empty strings");
   }
   const skills = normalizeAgentSkills(rawSkills);
+  const installedSkills = parseInstalledSkillsInput(body?.installedSkills);
+  const normalizedSkills =
+    installedSkills === undefined
+      ? skills
+      : resolveEnabledSkillKeys(skills, installedSkills);
   const avatar = parseAgentAvatar(body?.avatar);
   const roleTitle =
     getOptionalTrimmedString(body?.roleTitle) ??
@@ -329,11 +340,14 @@ export function parseCreateAgentInput(payload: unknown): CreateAgentInput {
   if (presetId && presetId.length > 120) {
     throw new Error("Validation failed: presetId must be 120 characters or less");
   }
-  if (skills.length > 25) {
+  if (normalizedSkills.length > 25) {
     throw new Error("Validation failed: no more than 25 skills may be assigned");
   }
-  if (skills.some((skill) => skill.length < 2 || skill.length > 120)) {
+  if (normalizedSkills.some((skill) => skill.length < 2 || skill.length > 120)) {
     throw new Error("Validation failed: each skill must be 2-120 characters");
+  }
+  if (installedSkills && installedSkills.length > 25) {
+    throw new Error("Validation failed: installedSkills may not exceed 25 entries");
   }
 
   return {
@@ -343,7 +357,8 @@ export function parseCreateAgentInput(payload: unknown): CreateAgentInput {
     presetId,
     avatar,
     agentType: normalizeAgentTypeId(requestedAgentType),
-    skills,
+    skills: normalizedSkills,
+    installedSkills,
     channel
   };
 }
@@ -353,18 +368,35 @@ export function parseUpdateAgentInput(payload: unknown): Partial<{
   roleTitle: string;
   status: "running" | "paused";
   avatar: NonNullable<CreateAgentInput["avatar"]>;
+  skills: string[];
+  installedSkills: AgentInstalledSkill[];
 }> {
   const body = payload as {
     name?: unknown;
     roleTitle?: unknown;
     status?: unknown;
     avatar?: unknown;
+    skills?: unknown;
+    installedSkills?: unknown;
   };
 
   const name = getOptionalTrimmedString(body?.name);
   const roleTitle = getOptionalTrimmedString(body?.roleTitle);
   const status = body?.status === "running" || body?.status === "paused" ? body.status : undefined;
   const avatar = body?.avatar === undefined ? undefined : parseAgentAvatar(body.avatar);
+  if (body?.skills !== undefined && !Array.isArray(body.skills)) {
+    throw new Error("Validation failed: skills must be an array of strings");
+  }
+  const rawSkills = Array.isArray(body?.skills)
+    ? body.skills.map((item) => (typeof item === "string" ? item.trim() : ""))
+    : undefined;
+  if (rawSkills?.some((item) => !item)) {
+    throw new Error("Validation failed: skills must contain non-empty strings");
+  }
+  const skills = rawSkills ? normalizeAgentSkills(rawSkills) : undefined;
+  const installedSkills = parseInstalledSkillsInput(body?.installedSkills);
+  const normalizedSkills =
+    installedSkills && skills ? resolveEnabledSkillKeys(skills, installedSkills) : skills;
 
   if (name !== undefined && (name.length < 2 || name.length > 120)) {
     throw new Error("Validation failed: name must be 2-120 characters");
@@ -380,8 +412,21 @@ export function parseUpdateAgentInput(payload: unknown): Partial<{
     name,
     roleTitle,
     status,
-    avatar
+    avatar,
+    skills: normalizedSkills,
+    installedSkills
   };
+}
+
+function parseInstalledSkillsInput(payload: unknown): AgentInstalledSkill[] | undefined {
+  if (payload === undefined) {
+    return undefined;
+  }
+  if (!Array.isArray(payload)) {
+    throw new Error("Validation failed: installedSkills must be an array of objects");
+  }
+
+  return normalizeInstalledSkills(payload as Array<Partial<AgentInstalledSkill>>);
 }
 
 function parseAgentAvatar(value: unknown): NonNullable<CreateAgentInput["avatar"]> | undefined {

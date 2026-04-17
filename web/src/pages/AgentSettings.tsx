@@ -24,6 +24,7 @@ import {
 import { toast } from "sonner";
 
 import { AgentAvatarField } from "@/components/AgentAvatarField";
+import { AgentSkillsSettingsPanel } from "@/components/AgentSkillsSettingsPanel";
 import { RuntimeConfigFields } from "@/components/RuntimeConfigFields";
 import {
   DiscordIntegrationCard,
@@ -53,6 +54,7 @@ import {
   downloadRuntimeSharedFile,
   checkRuntimeSlackOnboarding,
   exportRuntimeEvents,
+  getAgentSkillsCatalog,
   getErrorMessage,
   getRuntimeChatErrorMessage,
   getModelCatalog,
@@ -129,7 +131,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const RUNTIME_REFRESH_INTERVAL_MS = 5000;
-type AgentSettingsTab = "overview" | "runtime" | "shared-files" | "channels";
+type AgentSettingsTab = "overview" | "skills" | "runtime" | "shared-files" | "channels";
 const EMPTY_CHAT_MESSAGES: RuntimeChatMessage[] = [];
 
 export default function AgentSettings() {
@@ -180,6 +182,11 @@ export default function AgentSettings() {
     queryKey: ["model-catalog", DEFAULT_LLM_PROVIDER],
     queryFn: () => getModelCatalog(DEFAULT_LLM_PROVIDER),
     retry: 0,
+  });
+  const skillCatalogQuery = useQuery({
+    queryKey: ["agent-skill-catalog", agentId],
+    queryFn: () => getAgentSkillsCatalog(agentId),
+    enabled: Boolean(agentId),
   });
   const instanceId = (instancesQuery.data ?? []).find((item) => item.agentId === agentId)?.id;
   const isChatTabActive = activeTab === "overview";
@@ -361,14 +368,40 @@ export default function AgentSettings() {
     },
     onSuccess: async (payload) => {
       toast.success("Helper profile saved");
-      setAgentName(payload.name);
-      setAgentRoleTitle(payload.roleTitle ?? "");
-      setAgentAvatar(payload.avatar);
+      setAgentName(payload.agent.name);
+      setAgentRoleTitle(payload.agent.roleTitle ?? "");
+      setAgentAvatar(payload.agent.avatar);
       await queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
     onError: (error) => {
       toast.error(getErrorMessage(error, "Could not save helper profile"));
     },
+  });
+
+  const agentSkillsMutation = useMutation({
+    mutationFn: async (input: {
+      skills: string[];
+      installedSkills: NonNullable<typeof detail.agent>["installedSkills"];
+    }) => {
+      if (!detail.agent) throw new Error("No helper found");
+      return updateAgent(detail.agent.id, input);
+    },
+    onSuccess: async (payload) => {
+      const message =
+        payload.workspaceSync.status === "synced"
+          ? "Skills saved and workspace synced"
+          : payload.workspaceSync.status === "deferred"
+            ? "Skills saved. Workspace sync will run at next provision."
+            : "Skills saved";
+      toast.success(message);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["agents"] }),
+        queryClient.invalidateQueries({ queryKey: ["agent-skill-catalog", agentId] })
+      ]);
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Could not save helper skills"));
+    }
   });
 
   const llmMutation = useMutation({
@@ -764,6 +797,9 @@ export default function AgentSettings() {
               <TabsTrigger value="overview" className="atoll-rail-button justify-start gap-3 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none">
                 <Bot className="h-4 w-4" /> Overview
               </TabsTrigger>
+              <TabsTrigger value="skills" className="atoll-rail-button justify-start gap-3 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none">
+                <Wrench className="h-4 w-4" /> Skills
+              </TabsTrigger>
               <TabsTrigger value="shared-files" className="atoll-rail-button justify-start gap-3 data-[state=active]:bg-accent data-[state=active]:text-accent-foreground data-[state=active]:shadow-none">
                 <FolderOpen className="h-4 w-4" /> Shared files
               </TabsTrigger>
@@ -777,6 +813,14 @@ export default function AgentSettings() {
           </aside>
 
           <div className="space-y-4">
+            <TabsContent value="skills" className="mt-0 space-y-4">
+              <AgentSkillsSettingsPanel
+                agent={detail.agent}
+                catalogItems={skillCatalogQuery.data ?? []}
+                savePending={agentSkillsMutation.isPending}
+                onSave={(input) => agentSkillsMutation.mutateAsync(input)}
+              />
+            </TabsContent>
             <TabsContent value="runtime" className="mt-0 space-y-4">
           <Card>
             <CardHeader>
@@ -2128,6 +2172,7 @@ function formatFileSize(sizeBytes: number): string {
 function parseAgentSettingsTab(value: string | null): AgentSettingsTab | undefined {
   if (
     value === "overview" ||
+    value === "skills" ||
     value === "runtime" ||
     value === "shared-files" ||
     value === "channels"
