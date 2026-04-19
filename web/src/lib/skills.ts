@@ -1,10 +1,16 @@
 const SKILLS_SH_HOSTNAME = "skills.sh";
+const AGENTSKILLS_HOSTNAME = "agentskills.co.il";
 const GITHUB_HOSTNAME = "github.com";
 const RAW_GITHUB_HOSTNAME = "raw.githubusercontent.com";
 
 export function isSkillsShRef(ref: string): boolean {
   const parsed = tryParseUrl(ref.trim());
   return Boolean(parsed && parsed.protocol === "https:" && parsed.hostname === SKILLS_SH_HOSTNAME);
+}
+
+export function isAgentSkillsRef(ref: string): boolean {
+  const parsed = tryParseUrl(ref.trim());
+  return Boolean(parsed && parsed.protocol === "https:" && parsed.hostname === AGENTSKILLS_HOSTNAME);
 }
 
 export function isSupportedSkillRef(ref: string, explicitKey?: string): boolean {
@@ -20,7 +26,7 @@ export function isSupportedSkillRef(ref: string, explicitKey?: string): boolean 
 
   const parsed = tryParseUrl(normalized);
   if (parsed) {
-    if (isSkillsShRef(normalized)) {
+    if (isSkillsShRef(normalized) || isAgentSkillsRef(normalized)) {
       return true;
     }
 
@@ -55,7 +61,7 @@ export function deriveSkillKey(value: string, explicitKey?: string): string {
 
   const parsed = tryParseUrl(normalized);
   if (parsed) {
-    if (isSkillsShRef(normalized)) {
+    if (isSkillsShRef(normalized) || isAgentSkillsRef(normalized)) {
       return deriveSkillKeyFromUrl(parsed);
     }
 

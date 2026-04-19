@@ -143,7 +143,9 @@ export function AgentSkillsSettingsPanel({
     const ref = installRef.trim();
     const explicitKey = installKey.trim();
     if (!isSupportedSkillRef(ref, explicitKey)) {
-      toast.error("Supported sources are skills.sh pages, GitHub URLs, local paths, and raw markdown skill files.");
+      toast.error(
+        "Supported sources are skills.sh pages, agentskills.co.il skill pages, GitHub URLs, local paths, and raw markdown skill files."
+      );
       return;
     }
 
@@ -371,7 +373,7 @@ export function AgentSkillsSettingsPanel({
         <CardHeader className="border-b border-border/70">
           <CardTitle className="text-lg">Install from source</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Supported sources: `skills.sh` pages, GitHub repository or tree URLs, local skill folders, and raw `SKILL.md` links.
+            Supported sources: `skills.sh` pages, `agentskills.co.il` skill pages, GitHub repository or tree URLs, local skill folders, and raw `SKILL.md` links.
           </p>
         </CardHeader>
         <CardContent className="space-y-4 p-6">

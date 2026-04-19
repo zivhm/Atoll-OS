@@ -2,6 +2,7 @@ import { normalizeAgentSkills } from "./agent-types.js";
 import type { AgentPresetCatalogItem } from "./agent-presets.js";
 
 const SKILLS_SH_HOSTNAME = "skills.sh";
+const AGENTSKILLS_HOSTNAME = "agentskills.co.il";
 const GITHUB_HOSTNAME = "github.com";
 const RAW_GITHUB_HOSTNAME = "raw.githubusercontent.com";
 
@@ -51,7 +52,7 @@ type ResolveAgentSkillStateInput = {
 };
 
 export function isTrustedSkillRef(ref: string): boolean {
-  return isSkillsShRef(ref);
+  return isSkillsShRef(ref) || isAgentSkillsRef(ref);
 }
 
 export function isSkillsShRef(ref: string): boolean {
@@ -63,6 +64,20 @@ export function isSkillsShRef(ref: string): boolean {
   try {
     const parsed = new URL(normalized);
     return parsed.protocol === "https:" && parsed.hostname === SKILLS_SH_HOSTNAME;
+  } catch {
+    return false;
+  }
+}
+
+export function isAgentSkillsRef(ref: string): boolean {
+  const normalized = ref.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    return parsed.protocol === "https:" && parsed.hostname === AGENTSKILLS_HOSTNAME;
   } catch {
     return false;
   }
@@ -107,7 +122,7 @@ export function deriveSkillKey(value: string, explicitKey?: string): string {
 
   const parsedUrl = tryParseUrl(normalized);
   if (parsedUrl) {
-    if (isSkillsShRef(normalized)) {
+    if (isSkillsShRef(normalized) || isAgentSkillsRef(normalized)) {
       return deriveSkillKeyFromUrlPath(parsedUrl);
     }
 
@@ -388,6 +403,19 @@ export function resolveSkillInstallSource(input: {
       };
     }
 
+    if (isAgentSkillsRef(ref)) {
+      const source = resolveAgentSkillsGithubSourceFromUrl(parsedUrl);
+      if (!source) {
+        return undefined;
+      }
+      return {
+        kind: "github",
+        key,
+        source,
+        packageRef: `https://github.com/${source}`
+      };
+    }
+
     if (parsedUrl.hostname === GITHUB_HOSTNAME) {
       const source = resolveGithubSourceFromUrl(parsedUrl);
       if (!source) {
@@ -462,6 +490,22 @@ function resolveGithubSourceFromUrl(url: URL): string | undefined {
   }
 
   return `${segments[0]}/${segments[1]}`;
+}
+
+function resolveAgentSkillsGithubSourceFromUrl(url: URL): string | undefined {
+  const segments = getUrlPathSegments(url);
+  const offset = segments[0] === "en" || segments[0] === "he" ? 1 : 0;
+  if (segments[offset] !== "skills") {
+    return undefined;
+  }
+
+  const category = segments[offset + 1];
+  const slug = segments[offset + 2];
+  if (!category || !slug) {
+    return undefined;
+  }
+
+  return `skills-il/${category}`;
 }
 
 function isLikelyLocalSkillPath(value: string): boolean {

@@ -212,6 +212,45 @@ describe("AgentSkillsSettingsPanel", () => {
     });
   });
 
+  it("installs a Skills IL skill page source without an explicit key", async () => {
+    const onSave = vi.fn().mockResolvedValue({
+      agent: buildAgent(),
+      workspaceSync: {
+        status: "deferred",
+        message: "No runtime exists yet. Skill artifacts will materialize during the next provision."
+      }
+    });
+
+    render(
+      <AgentSkillsSettingsPanel
+        agent={buildAgent()}
+        catalogItems={[]}
+        onSave={onSave}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("https://skills.sh/obra/superpowers/writing-plans"), {
+      target: {
+        value: "https://agentskills.co.il/en/skills/localization/hebrew-document-generator"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Install source" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save skills" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0]?.[0]).toEqual({
+      skills: ["hebrew-document-generator"],
+      installedSkills: [
+        expect.objectContaining({
+          key: "hebrew-document-generator",
+          ref: "https://agentskills.co.il/en/skills/localization/hebrew-document-generator",
+          label: "Hebrew Document Generator",
+          sourceKind: "manual"
+        })
+      ]
+    });
+  });
+
   it("supports disabling, reordering, uninstalling, and saving the resulting effective skill list", async () => {
     const onSave = vi.fn().mockResolvedValue({
       agent: buildAgent(),

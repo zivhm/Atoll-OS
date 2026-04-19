@@ -486,6 +486,12 @@ test("resolveSkillsCatalogDownloadSpec ignores non-skills.sh refs", () => {
     resolveSkillsCatalogDownloadSpec("https://github.com/obra/superpowers"),
     undefined
   );
+  assert.equal(
+    resolveSkillsCatalogDownloadSpec(
+      "https://agentskills.co.il/en/skills/localization/hebrew-document-generator"
+    ),
+    undefined
+  );
 });
 
 test("renderRuntimeSkillArtifacts replaces managed skill blocks and preserves unmanaged content", () => {

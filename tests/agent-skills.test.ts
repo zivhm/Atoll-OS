@@ -6,6 +6,7 @@ import test from "node:test";
 
 import Fastify from "fastify";
 
+import { resolveSkillInstallSource } from "../src/agent-skills.js";
 import { registerTenantAgentRoutes } from "../src/http/routes/tenants-agents.routes.js";
 import { parseCreateAgentInput, parseUpdateAgentInput } from "../src/parsers.js";
 import { createStore } from "../src/store.js";
@@ -60,7 +61,7 @@ test("parseCreateAgentInput rejects enabled skills that are not installed", () =
   );
 });
 
-test("parseCreateAgentInput rejects non-skills.sh installs from helper settings", () => {
+test("parseCreateAgentInput rejects unsupported helper skill sources", () => {
   assert.throws(
     () =>
       parseCreateAgentInput({
@@ -118,6 +119,42 @@ test("parseCreateAgentInput accepts local skill paths", () => {
   assert.deepEqual(parsed.skills, ["local-skill"]);
   assert.equal(parsed.installedSkills?.[0]?.ref, "C:\\skills\\local-skill");
   assert.equal(parsed.installedSkills?.[0]?.key, "local-skill");
+});
+
+test("parseCreateAgentInput accepts Skills IL skill page installs", () => {
+  const parsed = parseCreateAgentInput({
+    tenantId: "tenant-1",
+    name: "Nora",
+    channel: "custom",
+    installedSkills: [
+      createInstalledSkill({
+        key: "hebrew-document-generator",
+        ref: "https://agentskills.co.il/en/skills/localization/hebrew-document-generator",
+        label: "Hebrew Document Generator"
+      })
+    ],
+    skills: ["hebrew-document-generator"]
+  });
+
+  assert.deepEqual(parsed.skills, ["hebrew-document-generator"]);
+  assert.equal(
+    parsed.installedSkills?.[0]?.ref,
+    "https://agentskills.co.il/en/skills/localization/hebrew-document-generator"
+  );
+  assert.equal(parsed.installedSkills?.[0]?.key, "hebrew-document-generator");
+});
+
+test("resolveSkillInstallSource maps Skills IL pages to the category GitHub repo", () => {
+  const source = resolveSkillInstallSource({
+    ref: "https://agentskills.co.il/en/skills/localization/hebrew-document-generator"
+  });
+
+  assert.deepEqual(source, {
+    kind: "github",
+    key: "hebrew-document-generator",
+    source: "skills-il/localization",
+    packageRef: "https://github.com/skills-il/localization"
+  });
 });
 
 test("parseUpdateAgentInput rejects duplicate installed skill refs and keys", () => {
