@@ -77,7 +77,7 @@ describe("AgentSkillsSettingsPanel", () => {
 
     expect(screen.getByText("Installed")).toBeInTheDocument();
     expect(screen.getByText("Recommended for this preset")).toBeInTheDocument();
-    expect(screen.getByText("Install from URL")).toBeInTheDocument();
+    expect(screen.getByText("Install from source")).toBeInTheDocument();
     expect(screen.getByTestId("installed-skill-brainstorming")).toBeInTheDocument();
     expect(screen.getByTestId("recommended-skill-writing-plans")).toBeInTheDocument();
   });
@@ -151,7 +151,7 @@ describe("AgentSkillsSettingsPanel", () => {
         }
       }
     );
-    fireEvent.click(screen.getByRole("button", { name: "Install URL" }));
+    fireEvent.click(screen.getByRole("button", { name: "Install source" }));
     fireEvent.click(screen.getByRole("button", { name: "Save skills" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
@@ -161,6 +161,50 @@ describe("AgentSkillsSettingsPanel", () => {
         expect.objectContaining({
           key: "writing-plans",
           ref: "https://skills.sh/obra/superpowers/writing-plans",
+          label: "Writing Plans",
+          sourceKind: "manual"
+        })
+      ]
+    });
+  });
+
+  it("installs a GitHub repo source when a manual key is supplied", async () => {
+    const onSave = vi.fn().mockResolvedValue({
+      agent: buildAgent(),
+      workspaceSync: {
+        status: "deferred",
+        message: "No runtime exists yet. Skill artifacts will materialize during the next provision."
+      }
+    });
+
+    render(
+      <AgentSkillsSettingsPanel
+        agent={buildAgent()}
+        catalogItems={[]}
+        onSave={onSave}
+      />
+    );
+
+    fireEvent.change(screen.getByPlaceholderText("https://skills.sh/obra/superpowers/writing-plans"), {
+      target: {
+        value: "https://github.com/obra/superpowers"
+      }
+    });
+    fireEvent.change(screen.getByPlaceholderText("writing-plans (optional)"), {
+      target: {
+        value: "writing-plans"
+      }
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Install source" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save skills" }));
+
+    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
+    expect(onSave.mock.calls[0]?.[0]).toEqual({
+      skills: ["writing-plans"],
+      installedSkills: [
+        expect.objectContaining({
+          key: "writing-plans",
+          ref: "https://github.com/obra/superpowers",
           label: "Writing Plans",
           sourceKind: "manual"
         })

@@ -1,8 +1,11 @@
 import { execFile, spawn } from "node:child_process";
+import { mkdir, mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join, posix as pathPosix } from "node:path";
 import { promisify } from "node:util";
 
-import type { AgentInstalledSkill } from "./agent-skills.js";
+import { resolveSkillInstallSource, type AgentInstalledSkill } from "./agent-skills.js";
 import {
   getRuntimeConnector,
   getRuntimeDescriptor,
@@ -32,6 +35,8 @@ const DEFAULT_RUNTIME_PROCESS_MODE: RuntimeProcessMode = "daemon";
 const LOOPBACK_PUBLISH_HOST = "127.0.0.1";
 export const SHARED_WORKSPACE_MOUNT_PATH = "/atoll-shared-workspace";
 export const RUNTIME_SHARED_FILES_DIRNAME = "shared-files";
+const RUNTIME_MANAGED_SKILLS_DIR = ".agents/skills";
+const RUNTIME_VISIBLE_SKILLS_DIR = "skills";
 const runtimeVolumeIo = createRuntimeVolumeIo(runDockerBuffer);
 
 export type RuntimeLlmConfig = {
@@ -378,6 +383,13 @@ export async function provisionRuntimeContainer(input: ProvisionRuntimeContainer
   );
 
   await runDocker(runArgs, `start runtime container ${input.containerName}`);
+  if (runtimeType === "hermes") {
+    await syncRuntimeSkillArtifacts({
+      runtimeType,
+      volumeName: input.volumeName,
+      workspaceProfile: input.workspaceProfile
+    });
+  }
   await reconcileRuntimeGuiSidecar({
     runtimeType,
     containerName: input.containerName,
@@ -673,6 +685,7 @@ export async function destroyRuntimeContainer(input: {
   await runDocker(["rm", "-f", sidecarContainerName], `remove GUI sidecar ${sidecarContainerName}`, true);
   await runDocker(["rm", "-f", input.containerName], `remove container ${input.containerName}`, true);
   if (input.destroyVolume ?? true) {
+    await removeContainersUsingVolume(input.volumeName);
     await runDocker(["volume", "rm", input.volumeName], `remove volume ${input.volumeName}`, true);
   }
 }
@@ -1153,7 +1166,10 @@ export function buildHermesConfigYaml(input: {
     `  cwd: ${toYamlString("/opt/data/atoll/workspace")}`,
     "  timeout: 180",
     `  docker_mount_cwd_to_workspace: ${toYamlBoolean(false)}`,
-    "  lifetime_seconds: 300"
+    "  lifetime_seconds: 300",
+    "skills:",
+    "  external_dirs:",
+    `    - ${toYamlString("/opt/data/atoll/workspace/.agents/skills")}`
   ];
 
   if (input.slack.enabled) {
@@ -1349,6 +1365,21 @@ const TOOLS_SKILLS_MANAGED_START = "<!-- ATOLL:MANAGED-SKILLS:TOOLS:START -->";
 const TOOLS_SKILLS_MANAGED_END = "<!-- ATOLL:MANAGED-SKILLS:TOOLS:END -->";
 
 export function buildRuntimeSkillsLockJson(profile?: RuntimeWorkspaceProfile): string {
+  const githubSkills = Object.fromEntries(
+    resolveWorkspaceInstalledSkills(profile)
+      .map((skill) => resolveSkillInstallSource(skill))
+      .filter((source): source is Extract<NonNullable<typeof source>, { kind: "github" }> =>
+        Boolean(source && source.kind === "github")
+      )
+      .map((source) => [
+        source.key,
+        {
+          source: source.source,
+          sourceType: "github" as const
+        }
+      ])
+  );
+
   const payload = {
     version: 1 as const,
     helper: {
@@ -1357,7 +1388,8 @@ export function buildRuntimeSkillsLockJson(profile?: RuntimeWorkspaceProfile): s
       ...(profile?.presetName?.trim() ? { presetName: profile.presetName.trim() } : {})
     },
     enabledSkills: resolveWorkspaceEnabledSkills(profile),
-    installedSkills: resolveWorkspaceInstalledSkills(profile)
+    installedSkills: resolveWorkspaceInstalledSkills(profile),
+    ...(Object.keys(githubSkills).length > 0 ? { skills: githubSkills } : {})
   };
 
   return `${JSON.stringify(payload, null, 2)}\n`;
@@ -1399,6 +1431,7 @@ export async function syncRuntimeSkillArtifacts(
 ): Promise<void> {
   const runtimeType = normalizeRuntimeType(input.runtimeType);
   const descriptor = getRuntimeDescriptor(runtimeType);
+  const installedSkills = resolveWorkspaceInstalledSkills(input.workspaceProfile);
   const userPath = `${descriptor.workspaceDir}/USER.md`;
   const toolsPath = `${descriptor.workspaceDir}/TOOLS.md`;
   const skillsLockPath = `${descriptor.workspaceDir}/skills-lock.json`;
@@ -1454,6 +1487,494 @@ export async function syncRuntimeSkillArtifacts(
     volumeName: input.volumeName,
     filePaths: [skillsLockPath, userPath, toolsPath]
   });
+
+  const tempRoot = await buildLocalManagedSkillWorkspace(installedSkills);
+  try {
+    await syncRuntimeManagedSkillWorkspace({
+      descriptor,
+      volumeName: input.volumeName,
+      tempRoot
+    });
+    if (runtimeType === "hermes") {
+      await syncHermesRuntimeSkillWorkspace({
+        descriptor,
+        volumeName: input.volumeName,
+        tempRoot
+      });
+    }
+  } finally {
+    await rm(tempRoot, {
+      recursive: true,
+      force: true
+    });
+  }
+}
+
+async function syncRuntimeManagedSkillWorkspace(input: {
+  descriptor: RuntimeDescriptor;
+  volumeName: string;
+  tempRoot: string;
+}): Promise<void> {
+  const managedSkillsRoot = `${input.descriptor.workspaceDir}/${RUNTIME_MANAGED_SKILLS_DIR}`;
+  const visibleSkillsRoot = `${input.descriptor.workspaceDir}/${RUNTIME_VISIBLE_SKILLS_DIR}`;
+  await resetRuntimeManagedSkillDirectories({
+    descriptor: input.descriptor,
+    volumeName: input.volumeName,
+    managedSkillsRoot,
+    visibleSkillsRoot
+  });
+
+  const writtenRuntimeFiles = await copyLocalManagedSkillWorkspaceToRuntime({
+    descriptor: input.descriptor,
+    volumeName: input.volumeName,
+    tempRoot: input.tempRoot,
+    destinationRoot: managedSkillsRoot,
+    labelPrefix: "write runtime managed skill"
+  });
+
+  await finalizeRuntimeManagedSkillDirectories({
+    descriptor: input.descriptor,
+    volumeName: input.volumeName,
+    managedSkillsRoot,
+    visibleSkillsRoot
+  });
+
+  if (writtenRuntimeFiles.length > 0) {
+    await applyRuntimeWorkspaceFilePermissions({
+      descriptor: input.descriptor,
+      volumeName: input.volumeName,
+      filePaths: writtenRuntimeFiles
+    });
+  }
+}
+
+async function syncHermesRuntimeSkillWorkspace(input: {
+  descriptor: RuntimeDescriptor;
+  volumeName: string;
+  tempRoot: string;
+}): Promise<void> {
+  const hermesSkillsRoot = `${input.descriptor.dataRoot}/${RUNTIME_VISIBLE_SKILLS_DIR}`;
+  await resetHermesRuntimeSkillDirectory({
+    descriptor: input.descriptor,
+    volumeName: input.volumeName,
+    hermesSkillsRoot
+  });
+
+  const writtenRuntimeFiles = await copyLocalManagedSkillWorkspaceToRuntime({
+    descriptor: input.descriptor,
+    volumeName: input.volumeName,
+    tempRoot: input.tempRoot,
+    destinationRoot: hermesSkillsRoot,
+    labelPrefix: "write hermes runtime skill"
+  });
+
+  if (writtenRuntimeFiles.length > 0) {
+    await applyRuntimeWorkspaceFilePermissions({
+      descriptor: input.descriptor,
+      volumeName: input.volumeName,
+      filePaths: writtenRuntimeFiles
+    });
+  }
+}
+
+async function buildLocalManagedSkillWorkspace(installedSkills: AgentInstalledSkill[]): Promise<string> {
+  const tempRoot = await mkdtemp(join(tmpdir(), "atoll-runtime-skills-"));
+  const localSkillsRoot = join(tempRoot, ...RUNTIME_MANAGED_SKILLS_DIR.split("/"));
+  await writeFile(join(tempRoot, "skills-lock.json"), Buffer.from("{}\n", "utf8"));
+
+  const githubSkills = installedSkills
+    .filter((skill) => !resolveSkillsCatalogDownloadSpec(skill.ref))
+    .map((skill) => resolveSkillInstallSource(skill))
+    .filter((source): source is Extract<NonNullable<typeof source>, { kind: "github" }> =>
+      Boolean(source && source.kind === "github")
+    );
+  if (githubSkills.length > 0) {
+    const skillsLockJson = JSON.stringify(
+      {
+        version: 1,
+        skills: Object.fromEntries(
+          githubSkills.map((skill) => [
+            skill.key,
+            {
+              source: skill.source,
+              sourceType: "github"
+            }
+          ])
+        )
+      },
+      null,
+      2
+    );
+    await writeFile(join(tempRoot, "skills-lock.json"), `${skillsLockJson}\n`, "utf8");
+    await runSkillsCli(
+      ["experimental_install", "-y", "--agent", "codex"],
+      tempRoot,
+      "restore GitHub-backed helper skills into the runtime workspace"
+    );
+  }
+
+  for (const installedSkill of installedSkills) {
+    const catalogDownload = resolveSkillsCatalogDownloadSpec(installedSkill.ref);
+    if (catalogDownload) {
+      await materializeSkillsCatalogDownload({
+        download: catalogDownload,
+        destination: join(localSkillsRoot, installedSkill.key),
+        key: installedSkill.key
+      });
+      continue;
+    }
+
+    const source = resolveSkillInstallSource(installedSkill);
+    if (!source || source.kind === "github") {
+      continue;
+    }
+
+    const destination = join(localSkillsRoot, installedSkill.key);
+    if (source.kind === "local-path") {
+      await copyLocalSkillSourceToDirectory(source.path, destination);
+      continue;
+    }
+
+    await materializeRemoteSkillMarkdown({
+      url: source.url,
+      destination,
+      key: source.key
+    });
+  }
+
+  return tempRoot;
+}
+
+export function resolveSkillsCatalogDownloadSpec(ref: string): {
+  source: string;
+  slug: string;
+  url: string;
+} | undefined {
+  try {
+    const parsed = new URL(ref.trim());
+    if (parsed.protocol !== "https:" || parsed.hostname !== "skills.sh") {
+      return undefined;
+    }
+
+    const segments = parsed.pathname.replace(/\/+$/u, "").split("/").filter(Boolean);
+    if (segments.length < 3) {
+      return undefined;
+    }
+
+    const owner = segments[0];
+    const repo = segments[1];
+    if (!owner || !repo) {
+      return undefined;
+    }
+
+    const source = `${owner}/${repo}`;
+    const slug = segments[segments.length - 1] ?? "";
+    if (!slug) {
+      return undefined;
+    }
+
+    return {
+      source,
+      slug,
+      url: `https://skills.sh/api/download/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(slug)}`
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+async function copyLocalManagedSkillWorkspaceToRuntime(input: {
+  descriptor: RuntimeDescriptor;
+  volumeName: string;
+  tempRoot: string;
+  destinationRoot: string;
+  labelPrefix: string;
+}): Promise<string[]> {
+  const localSkillsRoot = join(input.tempRoot, ...RUNTIME_MANAGED_SKILLS_DIR.split("/"));
+  const localFiles = await listLocalFiles(localSkillsRoot);
+  const writtenRuntimeFiles: string[] = [];
+
+  for (const file of localFiles) {
+    const runtimeFilePath = `${input.destinationRoot}/${file.relativePath}`;
+    const content = await readFile(file.absolutePath);
+    await runtimeVolumeIo.writeFile({
+      volumeName: input.volumeName,
+      mountPath: input.descriptor.dataRoot,
+      filePath: runtimeFilePath,
+      content,
+      label: `${input.labelPrefix} ${runtimeFilePath}`
+    });
+    writtenRuntimeFiles.push(runtimeFilePath);
+  }
+
+  return writtenRuntimeFiles;
+}
+
+async function resetRuntimeManagedSkillDirectories(input: {
+  descriptor: RuntimeDescriptor;
+  volumeName: string;
+  managedSkillsRoot: string;
+  visibleSkillsRoot: string;
+}): Promise<void> {
+  await runDocker(
+    [
+      "run",
+      "--rm",
+      "--entrypoint",
+      "sh",
+      "-v",
+      `${input.volumeName}:${input.descriptor.dataRoot}`,
+      CONFIG_SEED_IMAGE,
+      "-lc",
+      [
+        `mkdir -p ${toShellSingleQuoted(pathPosix.dirname(input.managedSkillsRoot))}`,
+        `rm -rf ${toShellSingleQuoted(input.managedSkillsRoot)} ${toShellSingleQuoted(input.visibleSkillsRoot)}`,
+        `mkdir -p ${toShellSingleQuoted(input.managedSkillsRoot)}`
+      ].join(" && ")
+    ],
+    `reset runtime managed skills for volume ${input.volumeName}`
+  );
+}
+
+async function resetHermesRuntimeSkillDirectory(input: {
+  descriptor: RuntimeDescriptor;
+  volumeName: string;
+  hermesSkillsRoot: string;
+}): Promise<void> {
+  await runDocker(
+    [
+      "run",
+      "--rm",
+      "--entrypoint",
+      "sh",
+      "-v",
+      `${input.volumeName}:${input.descriptor.dataRoot}`,
+      CONFIG_SEED_IMAGE,
+      "-lc",
+      [
+        `mkdir -p ${toShellSingleQuoted(input.hermesSkillsRoot)}`,
+        `find ${toShellSingleQuoted(input.hermesSkillsRoot)} -mindepth 1 -maxdepth 1 ! -name '.bundled_manifest' -exec rm -rf {} +`
+      ].join(" && ")
+    ],
+    `reset hermes runtime skills for volume ${input.volumeName}`
+  );
+}
+
+async function finalizeRuntimeManagedSkillDirectories(input: {
+  descriptor: RuntimeDescriptor;
+  volumeName: string;
+  managedSkillsRoot: string;
+  visibleSkillsRoot: string;
+}): Promise<void> {
+  const visibleParent = pathPosix.dirname(input.visibleSkillsRoot);
+  const visibleLinkTarget = `./${RUNTIME_MANAGED_SKILLS_DIR}`;
+
+  await runDocker(
+    [
+      "run",
+      "--rm",
+      "--entrypoint",
+      "sh",
+      "-v",
+      `${input.volumeName}:${input.descriptor.dataRoot}`,
+      CONFIG_SEED_IMAGE,
+      "-lc",
+      [
+        `mkdir -p ${toShellSingleQuoted(visibleParent)}`,
+        `rm -rf ${toShellSingleQuoted(input.visibleSkillsRoot)}`,
+        `ln -s ${toShellSingleQuoted(visibleLinkTarget)} ${toShellSingleQuoted(input.visibleSkillsRoot)} || cp -R ${toShellSingleQuoted(input.managedSkillsRoot)} ${toShellSingleQuoted(input.visibleSkillsRoot)}`
+      ].join(" && ")
+    ],
+    `finalize runtime managed skills for volume ${input.volumeName}`
+  );
+}
+
+async function runSkillsCli(args: string[], cwd: string, context: string): Promise<void> {
+  const command = buildSkillsCliCommand(process.platform, args);
+  try {
+    await execFileAsync(command.file, command.args, {
+      cwd,
+      timeout: 300_000,
+      maxBuffer: 1024 * 1024 * 8
+    });
+  } catch (error) {
+    throw new Error(`Failed to ${context}: ${formatExecError(error)}`);
+  }
+}
+
+export function buildSkillsCliCommand(
+  platform: NodeJS.Platform,
+  args: string[]
+): {
+  file: string;
+  args: string[];
+} {
+  if (platform === "win32") {
+    return {
+      file: "cmd.exe",
+      args: ["/d", "/s", "/c", `npx.cmd skills ${args.map(quoteWindowsCmdArg).join(" ")}`]
+    };
+  }
+
+  return {
+    file: "npx",
+    args: ["skills", ...args]
+  };
+}
+
+function quoteWindowsCmdArg(value: string): string {
+  if (/^[A-Za-z0-9_./:-]+$/u.test(value)) {
+    return value;
+  }
+
+  return `"${value.replace(/"/gu, '\\"')}"`;
+}
+
+async function copyLocalSkillSourceToDirectory(sourcePath: string, destination: string): Promise<void> {
+  const sourceStats = await stat(sourcePath);
+  if (sourceStats.isDirectory()) {
+    await copyLocalDirectory(sourcePath, destination);
+  } else if (sourceStats.isFile()) {
+    await copyLocalSkillFile(sourcePath, destination);
+  } else {
+    throw new Error(`Unsupported local skill source at ${sourcePath}`);
+  }
+
+  await assertSkillDirectoryHasSkillMarkdown(destination);
+}
+
+async function copyLocalDirectory(sourcePath: string, destination: string): Promise<void> {
+  const entries = await readdir(sourcePath, {
+    withFileTypes: true
+  });
+  await ensureLocalDirectory(destination);
+
+  for (const entry of entries) {
+    const entrySource = join(sourcePath, entry.name);
+    const entryDestination = join(destination, entry.name);
+    if (entry.isDirectory()) {
+      await copyLocalDirectory(entrySource, entryDestination);
+      continue;
+    }
+    if (entry.isFile()) {
+      await ensureLocalDirectory(dirname(entryDestination));
+      await writeFile(entryDestination, await readFile(entrySource));
+    }
+  }
+}
+
+async function copyLocalSkillFile(sourcePath: string, destination: string): Promise<void> {
+  const normalizedSource = sourcePath.replace(/\\/gu, "/");
+  if (!/\.md$/iu.test(normalizedSource)) {
+    throw new Error(`Local skill file ${sourcePath} must be a markdown file`);
+  }
+
+  await ensureLocalDirectory(destination);
+  await writeFile(join(destination, "SKILL.md"), await readFile(sourcePath));
+}
+
+async function materializeRemoteSkillMarkdown(input: {
+  url: string;
+  destination: string;
+  key: string;
+}): Promise<void> {
+  const response = await fetch(input.url);
+  if (!response.ok) {
+    throw new Error(`Failed to download skill ${input.key} from ${input.url}: ${response.status}`);
+  }
+
+  await ensureLocalDirectory(input.destination);
+  await writeFile(join(input.destination, "SKILL.md"), await response.text(), "utf8");
+}
+
+async function materializeSkillsCatalogDownload(input: {
+  download: {
+    source: string;
+    slug: string;
+    url: string;
+  };
+  destination: string;
+  key: string;
+}): Promise<void> {
+  const response = await fetch(input.download.url);
+  if (!response.ok) {
+    throw new Error(
+      `Failed to download skill ${input.key} from ${input.download.source}: ${response.status}`
+    );
+  }
+
+  const payload = (await response.json()) as {
+    files?: Array<{
+      path?: string;
+      contents?: string;
+    }>;
+  };
+
+  if (!Array.isArray(payload.files) || payload.files.length === 0) {
+    throw new Error(`Downloaded skill ${input.key} from ${input.download.source} returned no files`);
+  }
+
+  for (const file of payload.files) {
+    const relativePath = typeof file.path === "string" ? file.path.trim() : "";
+    if (!relativePath) {
+      continue;
+    }
+
+    const outputPath = join(input.destination, ...relativePath.split("/"));
+    await ensureLocalDirectory(dirname(outputPath));
+    await writeFile(outputPath, file.contents ?? "", "utf8");
+  }
+
+  await assertSkillDirectoryHasSkillMarkdown(input.destination);
+}
+
+async function assertSkillDirectoryHasSkillMarkdown(directoryPath: string): Promise<void> {
+  const skillMarkdownPath = join(directoryPath, "SKILL.md");
+  const skillStats = await stat(skillMarkdownPath).catch(() => undefined);
+  if (!skillStats?.isFile()) {
+    throw new Error(`Installed skill at ${directoryPath} is missing SKILL.md`);
+  }
+}
+
+async function ensureLocalDirectory(directoryPath: string): Promise<void> {
+  await mkdir(directoryPath, {
+    recursive: true
+  });
+}
+
+async function listLocalFiles(rootPath: string): Promise<Array<{ absolutePath: string; relativePath: string }>> {
+  const rootStats = await stat(rootPath).catch(() => undefined);
+  if (!rootStats?.isDirectory()) {
+    return [];
+  }
+
+  const entries = await readdir(rootPath, {
+    withFileTypes: true
+  });
+  const files: Array<{ absolutePath: string; relativePath: string }> = [];
+
+  for (const entry of entries) {
+    const entryPath = join(rootPath, entry.name);
+    if (entry.isDirectory()) {
+      const nested = await listLocalFiles(entryPath);
+      files.push(
+        ...nested.map((file) => ({
+          absolutePath: file.absolutePath,
+          relativePath: `${entry.name}/${file.relativePath}`
+        }))
+      );
+      continue;
+    }
+
+    if (entry.isFile()) {
+      files.push({
+        absolutePath: entryPath,
+        relativePath: entry.name.replace(/\\/gu, "/")
+      });
+    }
+  }
+
+  return files;
 }
 
 function resolveWorkspaceEnabledSkills(profile?: RuntimeWorkspaceProfile): string[] {
@@ -2650,6 +3171,27 @@ async function runDocker(
     return "";
   }
   throw new Error(`Container CLI command failed (${label}): ${result.message}`);
+}
+
+async function removeContainersUsingVolume(volumeName: string): Promise<void> {
+  const cli = getContainerCli();
+  try {
+    const { stdout } = await execFileAsync(cli, ["ps", "-aq", "--filter", `volume=${volumeName}`], {
+      timeout: 120_000,
+      maxBuffer: 1024 * 1024
+    });
+    const containerIds = stdout
+      .split(/\r?\n/u)
+      .map((value) => value.trim())
+      .filter(Boolean);
+    if (containerIds.length === 0) {
+      return;
+    }
+
+    await runDocker(["rm", "-f", ...containerIds], `remove containers using volume ${volumeName}`, true);
+  } catch {
+    return;
+  }
 }
 
 async function probeDocker(

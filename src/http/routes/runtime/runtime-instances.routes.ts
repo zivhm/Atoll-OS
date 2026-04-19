@@ -8,6 +8,7 @@ import {
   resolveRuntimeHealthPath,
   resolveRuntimeImageForType
 } from "../../../runtime-kind.js";
+import { resolveRuntimeWorkspaceProfile } from "../../../runtime-workspace-profile.js";
 import {
   parseBooleanQueryValue,
   parsePositiveIntegerUnknown,
@@ -227,6 +228,11 @@ export function registerRuntimeInstancesRoutes(app: FastifyInstance, deps: Runti
 
     try {
       await runtimeProvider.startRuntimeContainer(runtimeInstance.containerName);
+      await runtimeProvider.syncRuntimeSkillArtifacts?.({
+        runtimeType: runtimeInstance.runtimeType,
+        volumeName: runtimeInstance.volumeName,
+        workspaceProfile: resolveRuntimeWorkspaceProfile(store, runtimeInstance)
+      });
       const updated = updateInstanceOrThrow(runtimeInstance.id, {
         status: "running",
         lastError: undefined
@@ -309,6 +315,11 @@ export function registerRuntimeInstancesRoutes(app: FastifyInstance, deps: Runti
       if (configuredInstance.status !== "running") {
         await runtimeProvider.restartRuntimeContainer(runtimeInstance.containerName);
       }
+      await runtimeProvider.syncRuntimeSkillArtifacts?.({
+        runtimeType: runtimeInstance.runtimeType,
+        volumeName: runtimeInstance.volumeName,
+        workspaceProfile: resolveRuntimeWorkspaceProfile(store, runtimeInstance)
+      });
       const updated = updateInstanceOrThrow(runtimeInstance.id, {
         status: "running",
         lastError: undefined

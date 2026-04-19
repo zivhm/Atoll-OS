@@ -348,6 +348,11 @@ export function registerRuntimeDiagnosticsRoutes(app: FastifyInstance, deps: Run
 
     try {
       await runtimeProvider.startRuntimeContainer(runtimeInstance.containerName);
+      await runtimeProvider.syncRuntimeSkillArtifacts?.({
+        runtimeType: runtimeInstance.runtimeType,
+        volumeName: runtimeInstance.volumeName,
+        workspaceProfile: resolveRuntimeWorkspaceProfile(store, runtimeInstance)
+      });
       steps.push({
         step: "start-container",
         ok: true,
@@ -385,6 +390,11 @@ export function registerRuntimeDiagnosticsRoutes(app: FastifyInstance, deps: Run
 
     try {
       await runtimeProvider.restartRuntimeContainer(runtimeInstance.containerName);
+      await runtimeProvider.syncRuntimeSkillArtifacts?.({
+        runtimeType: runtimeInstance.runtimeType,
+        volumeName: runtimeInstance.volumeName,
+        workspaceProfile: resolveRuntimeWorkspaceProfile(store, runtimeInstance)
+      });
       steps.push({
         step: "restart-container",
         ok: true,

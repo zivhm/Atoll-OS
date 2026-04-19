@@ -3,6 +3,8 @@ import test from "node:test";
 
 import { getAgentPresetById } from "../src/agent-presets.js";
 import {
+  buildSkillsCliCommand,
+  resolveSkillsCatalogDownloadSpec,
   buildHermesConfigYaml,
   buildHermesEnvFile,
   buildOpenClawConfigJson,
@@ -329,6 +331,10 @@ test("buildHermes config output matches the container-native Hermes layout", () 
   assert.match(configYaml, /base_url:\s*"https:\/\/openrouter\.ai\/api\/v1"/u);
   assert.match(configYaml, /terminal:\n\s+backend:\s*"local"/u);
   assert.match(configYaml, /cwd:\s*"\/opt\/data\/atoll\/workspace"/u);
+  assert.match(
+    configYaml,
+    /skills:\n\s+external_dirs:\n\s+-\s*"\/opt\/data\/atoll\/workspace\/\.agents\/skills"/u
+  );
   assert.match(configYaml, /platforms:\n\s+slack:/u);
   assert.match(configYaml, /reply_in_thread:\s*true/u);
   assert.match(configYaml, /discord:/u);
@@ -418,6 +424,7 @@ test("buildRuntimeSkillsLockJson writes enabled and installed helper skill state
     helper: { name: string; presetId?: string };
     enabledSkills: string[];
     installedSkills: Array<{ key: string; sourceKind: string }>;
+    skills?: Record<string, { source: string; sourceType: string }>;
   };
 
   assert.equal(payload.version, 1);
@@ -430,6 +437,54 @@ test("buildRuntimeSkillsLockJson writes enabled and installed helper skill state
       ["writing-plans", "preset"],
       ["brainstorming", "manual"]
     ]
+  );
+  assert.deepEqual(payload.skills, {
+    "writing-plans": {
+      source: "obra/superpowers",
+      sourceType: "github"
+    },
+    brainstorming: {
+      source: "obra/superpowers",
+      sourceType: "github"
+    }
+  });
+});
+
+test("buildSkillsCliCommand shells through cmd.exe on Windows", () => {
+  const command = buildSkillsCliCommand("win32", ["experimental_install", "-y", "--agent", "codex"]);
+
+  assert.equal(command.file, "cmd.exe");
+  assert.deepEqual(command.args, [
+    "/d",
+    "/s",
+    "/c",
+    "npx.cmd skills experimental_install -y --agent codex"
+  ]);
+});
+
+test("buildSkillsCliCommand runs npx directly on non-Windows platforms", () => {
+  const command = buildSkillsCliCommand("linux", ["experimental_install", "-y", "--agent", "codex"]);
+
+  assert.equal(command.file, "npx");
+  assert.deepEqual(command.args, ["skills", "experimental_install", "-y", "--agent", "codex"]);
+});
+
+test("resolveSkillsCatalogDownloadSpec derives source and slug from skills.sh refs", () => {
+  const spec = resolveSkillsCatalogDownloadSpec(
+    "https://skills.sh/supercent-io/skills-template/data-analysis"
+  );
+
+  assert.deepEqual(spec, {
+    source: "supercent-io/skills-template",
+    slug: "data-analysis",
+    url: "https://skills.sh/api/download/supercent-io/skills-template/data-analysis"
+  });
+});
+
+test("resolveSkillsCatalogDownloadSpec ignores non-skills.sh refs", () => {
+  assert.equal(
+    resolveSkillsCatalogDownloadSpec("https://github.com/obra/superpowers"),
+    undefined
   );
 });
 

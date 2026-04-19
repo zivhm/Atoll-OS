@@ -1,6 +1,10 @@
 import { normalizeAgentSkills } from "./agent-types.js";
 import type { AgentPresetCatalogItem } from "./agent-presets.js";
 
+const SKILLS_SH_HOSTNAME = "skills.sh";
+const GITHUB_HOSTNAME = "github.com";
+const RAW_GITHUB_HOSTNAME = "raw.githubusercontent.com";
+
 export const AGENT_INSTALLED_SKILL_SOURCE_KINDS = [
   "manual",
   "preset",
@@ -47,6 +51,10 @@ type ResolveAgentSkillStateInput = {
 };
 
 export function isTrustedSkillRef(ref: string): boolean {
+  return isSkillsShRef(ref);
+}
+
+export function isSkillsShRef(ref: string): boolean {
   const normalized = ref.trim();
   if (!normalized) {
     return false;
@@ -54,22 +62,66 @@ export function isTrustedSkillRef(ref: string): boolean {
 
   try {
     const parsed = new URL(normalized);
-    return parsed.protocol === "https:" && parsed.hostname === "skills.sh";
+    return parsed.protocol === "https:" && parsed.hostname === SKILLS_SH_HOSTNAME;
   } catch {
     return false;
   }
 }
 
-export function deriveSkillKey(value: string): string {
+export type SkillInstallSource =
+  | {
+      kind: "github";
+      key: string;
+      source: string;
+      packageRef: string;
+    }
+  | {
+      kind: "local-path";
+      key: string;
+      path: string;
+    }
+  | {
+      kind: "remote-markdown";
+      key: string;
+      url: string;
+    };
+
+export function isSupportedSkillRef(ref: string, key?: string): boolean {
+  return resolveSkillInstallSource({ ref, key }) !== undefined;
+}
+
+export function deriveSkillKey(value: string, explicitKey?: string): string {
+  const normalizedExplicitKey = normalizeSkillKey(explicitKey);
+  if (normalizedExplicitKey) {
+    return normalizedExplicitKey;
+  }
+
   const normalized = value.trim();
   if (!normalized) {
     return "";
   }
 
-  if (isTrustedSkillRef(normalized)) {
-    const pathname = new URL(normalized).pathname.replace(/\/+$/u, "");
-    const slug = pathname.split("/").filter(Boolean).at(-1) ?? "";
-    return slug.trim().toLowerCase();
+  if (isLikelyLocalSkillPath(normalized) && !/^https?:/iu.test(normalized)) {
+    return deriveSkillKeyFromLocalPath(normalized);
+  }
+
+  const parsedUrl = tryParseUrl(normalized);
+  if (parsedUrl) {
+    if (isSkillsShRef(normalized)) {
+      return deriveSkillKeyFromUrlPath(parsedUrl);
+    }
+
+    if (parsedUrl.hostname === GITHUB_HOSTNAME) {
+      const pathSegments = getUrlPathSegments(parsedUrl);
+      if (pathSegments.length === 2) {
+        return "";
+      }
+      return deriveSkillKeyFromUrlPath(parsedUrl);
+    }
+
+    if (parsedUrl.hostname === RAW_GITHUB_HOSTNAME || parsedUrl.pathname.endsWith(".md")) {
+      return deriveSkillKeyFromUrlPath(parsedUrl);
+    }
   }
 
   return normalized.toLowerCase();
@@ -130,14 +182,13 @@ export function normalizeInstalledSkills(
       typeof item.sourceKind === "string" ? item.sourceKind.trim().toLowerCase() : undefined,
       "manual"
     );
-    if (sourceKind !== "legacy" && !isTrustedSkillRef(ref)) {
-      throw new Error("Validation failed: installedSkills refs must use trusted https://skills.sh URLs");
-    }
-
     const key =
       typeof item.key === "string" && item.key.trim()
-        ? item.key.trim().toLowerCase()
+        ? normalizeSkillKey(item.key)
         : deriveSkillKey(ref);
+    if (sourceKind !== "legacy" && !isSupportedSkillRef(ref, key)) {
+      throw new Error("Validation failed: installedSkills refs must use a supported skill source");
+    }
     if (!key) {
       throw new Error("Validation failed: installedSkills must resolve to a key");
     }
@@ -301,4 +352,139 @@ export function buildAgentSkillCatalog(input: {
   }
 
   return [...items.values()].sort((left, right) => left.label.localeCompare(right.label));
+}
+
+export function resolveSkillInstallSource(input: {
+  ref: string;
+  key?: string;
+}): SkillInstallSource | undefined {
+  const ref = input.ref.trim();
+  const key = deriveSkillKey(ref, input.key);
+  if (!ref || !key) {
+    return undefined;
+  }
+
+  if (isLikelyLocalSkillPath(ref) && !/^https?:/iu.test(ref)) {
+    return {
+      kind: "local-path",
+      key,
+      path: ref
+    };
+  }
+
+  const parsedUrl = tryParseUrl(ref);
+  if (parsedUrl) {
+    if (isSkillsShRef(ref)) {
+      const segments = getUrlPathSegments(parsedUrl);
+      if (segments.length < 3) {
+        return undefined;
+      }
+      const source = `${segments[0]}/${segments[1]}`;
+      return {
+        kind: "github",
+        key,
+        source,
+        packageRef: `https://github.com/${source}`
+      };
+    }
+
+    if (parsedUrl.hostname === GITHUB_HOSTNAME) {
+      const source = resolveGithubSourceFromUrl(parsedUrl);
+      if (!source) {
+        return undefined;
+      }
+      return {
+        kind: "github",
+        key,
+        source,
+        packageRef: `https://github.com/${source}`
+      };
+    }
+
+    if (parsedUrl.hostname === RAW_GITHUB_HOSTNAME || parsedUrl.pathname.endsWith(".md")) {
+      return {
+        kind: "remote-markdown",
+        key,
+        url: ref
+      };
+    }
+
+    return undefined;
+  }
+
+  return undefined;
+}
+
+function normalizeSkillKey(value: string | undefined): string {
+  return typeof value === "string" ? value.trim().toLowerCase() : "";
+}
+
+function tryParseUrl(value: string): URL | undefined {
+  try {
+    return new URL(value);
+  } catch {
+    return undefined;
+  }
+}
+
+function getUrlPathSegments(url: URL): string[] {
+  return url.pathname.replace(/\/+$/u, "").split("/").filter(Boolean);
+}
+
+function deriveSkillKeyFromUrlPath(url: URL): string {
+  const segments = getUrlPathSegments(url);
+  if (segments.length === 0) {
+    return "";
+  }
+
+  const lastSegment = segments.at(-1) ?? "";
+  if (/^skill\.md$/iu.test(lastSegment) && segments.length >= 2) {
+    return (segments.at(-2) ?? "").trim().toLowerCase();
+  }
+
+  return lastSegment.replace(/\.md$/iu, "").trim().toLowerCase();
+}
+
+function deriveSkillKeyFromLocalPath(value: string): string {
+  const normalized = value.replace(/[\\/]+$/u, "");
+  const parts = normalized.split(/[\\/]/u).filter(Boolean);
+  const lastPart = parts.at(-1) ?? "";
+  if (/^skill\.md$/iu.test(lastPart) && parts.length >= 2) {
+    return (parts.at(-2) ?? "").trim().toLowerCase();
+  }
+  return lastPart.replace(/\.md$/iu, "").trim().toLowerCase();
+}
+
+function resolveGithubSourceFromUrl(url: URL): string | undefined {
+  const segments = getUrlPathSegments(url);
+  if (segments.length < 2) {
+    return undefined;
+  }
+
+  return `${segments[0]}/${segments[1]}`;
+}
+
+function isLikelyLocalSkillPath(value: string): boolean {
+  const normalized = value.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  if (/^[A-Za-z]:[\\/]/u.test(normalized) || normalized.startsWith("\\\\")) {
+    return true;
+  }
+
+  if (normalized.startsWith("./") || normalized.startsWith("../") || normalized.startsWith("~/")) {
+    return true;
+  }
+
+  if (normalized.includes("\\")) {
+    return true;
+  }
+
+  if (normalized.includes("/")) {
+    return true;
+  }
+
+  return false;
 }

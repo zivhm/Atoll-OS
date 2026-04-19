@@ -8,7 +8,7 @@ import type {
   AgentSkillCatalogItem,
   UpdateAgentResponse
 } from "@/lib/api";
-import { deriveSkillKey, formatSkillLabel, isTrustedSkillRef } from "@/lib/skills";
+import { deriveSkillKey, formatSkillLabel, isSupportedSkillRef } from "@/lib/skills";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -37,7 +37,8 @@ export function AgentSkillsSettingsPanel({
 }: AgentSkillsSettingsPanelProps) {
   const [installedSkills, setInstalledSkills] = useState<AgentInstalledSkill[]>(agent.installedSkills);
   const [enabledSkills, setEnabledSkills] = useState<string[]>(agent.skills);
-  const [installUrl, setInstallUrl] = useState("");
+  const [installRef, setInstallRef] = useState("");
+  const [installKey, setInstallKey] = useState("");
   const [saveNotice, setSaveNotice] = useState<SaveNotice | undefined>(undefined);
 
   useEffect(() => {
@@ -139,15 +140,16 @@ export function AgentSkillsSettingsPanel({
   }
 
   function installManualSkillFromUrl() {
-    const ref = installUrl.trim();
-    if (!isTrustedSkillRef(ref)) {
-      toast.error("Skill installs must use a trusted https://skills.sh URL.");
+    const ref = installRef.trim();
+    const explicitKey = installKey.trim();
+    if (!isSupportedSkillRef(ref, explicitKey)) {
+      toast.error("Supported sources are skills.sh pages, GitHub URLs, local paths, and raw markdown skill files.");
       return;
     }
 
-    const key = deriveSkillKey(ref);
+    const key = deriveSkillKey(ref, explicitKey);
     if (!key) {
-      toast.error("Could not derive a skill key from that URL.");
+      toast.error("Could not resolve a skill key. Provide one explicitly for repo-level sources.");
       return;
     }
     if (
@@ -167,14 +169,15 @@ export function AgentSkillsSettingsPanel({
       {
         key,
         ref,
-        label: formatSkillLabel(ref),
+        label: formatSkillLabel(ref, key),
         sourceKind: "manual",
         installedAt: now,
         updatedAt: now
       }
     ]);
     setEnabledSkills((current) => [...current, key]);
-    setInstallUrl("");
+    setInstallRef("");
+    setInstallKey("");
   }
 
   return (
@@ -307,7 +310,7 @@ export function AgentSkillsSettingsPanel({
         <CardHeader className="border-b border-border/70">
           <CardTitle className="text-lg">Recommended for this preset</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Curated install candidates come from active preset recommendations. Installing from here uses the same trusted ref path as manual installs.
+            Curated install candidates come from active preset recommendations. Installing from here preserves the ref that the runtime will materialize inside the helper workspace.
           </p>
         </CardHeader>
         <CardContent className="space-y-3 p-6">
@@ -366,9 +369,9 @@ export function AgentSkillsSettingsPanel({
 
       <Card>
         <CardHeader className="border-b border-border/70">
-          <CardTitle className="text-lg">Install from URL</CardTitle>
+          <CardTitle className="text-lg">Install from source</CardTitle>
           <p className="text-sm text-muted-foreground">
-            Only trusted `https://skills.sh/...` refs can be installed from helper settings.
+            Supported sources: `skills.sh` pages, GitHub repository or tree URLs, local skill folders, and raw `SKILL.md` links.
           </p>
         </CardHeader>
         <CardContent className="space-y-4 p-6">
@@ -376,17 +379,26 @@ export function AgentSkillsSettingsPanel({
             <div className="relative flex-1">
               <Link2 className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
-                value={installUrl}
+                value={installRef}
                 onChange={(event) => {
-                  setInstallUrl(event.target.value);
+                  setInstallRef(event.target.value);
                   setSaveNotice(undefined);
                 }}
                 placeholder="https://skills.sh/obra/superpowers/writing-plans"
                 className="pl-9"
               />
             </div>
+            <Input
+              value={installKey}
+              onChange={(event) => {
+                setInstallKey(event.target.value);
+                setSaveNotice(undefined);
+              }}
+              placeholder="writing-plans (optional)"
+              className="sm:max-w-56"
+            />
             <Button type="button" variant="outline" onClick={installManualSkillFromUrl}>
-              Install URL
+              Install source
             </Button>
           </div>
         </CardContent>

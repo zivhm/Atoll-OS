@@ -76,8 +76,48 @@ test("parseCreateAgentInput rejects non-skills.sh installs from helper settings"
         ],
         skills: ["external-skill"]
       }),
-    /skills\.sh/u
+    /supported skill source/u
   );
+});
+
+test("parseCreateAgentInput accepts GitHub repo skill installs when the key is provided", () => {
+  const parsed = parseCreateAgentInput({
+    tenantId: "tenant-1",
+    name: "Nora",
+    channel: "custom",
+    installedSkills: [
+      createInstalledSkill({
+        key: "writing-plans",
+        ref: "https://github.com/obra/superpowers",
+        label: "Writing Plans"
+      })
+    ],
+    skills: ["writing-plans"]
+  });
+
+  assert.deepEqual(parsed.skills, ["writing-plans"]);
+  assert.equal(parsed.installedSkills?.[0]?.ref, "https://github.com/obra/superpowers");
+  assert.equal(parsed.installedSkills?.[0]?.key, "writing-plans");
+});
+
+test("parseCreateAgentInput accepts local skill paths", () => {
+  const parsed = parseCreateAgentInput({
+    tenantId: "tenant-1",
+    name: "Nora",
+    channel: "custom",
+    installedSkills: [
+      createInstalledSkill({
+        key: "local-skill",
+        ref: "C:\\skills\\local-skill",
+        label: "Local Skill"
+      })
+    ],
+    skills: ["local-skill"]
+  });
+
+  assert.deepEqual(parsed.skills, ["local-skill"]);
+  assert.equal(parsed.installedSkills?.[0]?.ref, "C:\\skills\\local-skill");
+  assert.equal(parsed.installedSkills?.[0]?.key, "local-skill");
 });
 
 test("parseUpdateAgentInput rejects duplicate installed skill refs and keys", () => {
