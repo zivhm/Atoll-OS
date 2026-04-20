@@ -48,6 +48,12 @@ function buildCatalogItem(overrides: Partial<AgentSkillCatalogItem> = {}): Agent
     label: "Writing Plans",
     installed: false,
     enabled: false,
+    summary: "Produce structured implementation or execution plans.",
+    provider: "obra/superpowers",
+    sourceHost: "skills.sh",
+    recommendedForCurrentPreset: true,
+    originCategories: ["project-management"],
+    metadataStatus: "local",
     sourcePresets: [
       {
         presetId: "project-manager",
@@ -63,7 +69,7 @@ describe("AgentSkillsSettingsPanel", () => {
     vi.clearAllMocks();
   });
 
-  it("renders the installed, recommended, and manual install sections", () => {
+  it("renders installed and browse sections plus root explore sources only", () => {
     render(
       <AgentSkillsSettingsPanel
         agent={buildAgent({
@@ -75,11 +81,37 @@ describe("AgentSkillsSettingsPanel", () => {
       />
     );
 
-    expect(screen.getByText("Installed")).toBeInTheDocument();
-    expect(screen.getByText("Recommended for this preset")).toBeInTheDocument();
-    expect(screen.getByText("Install from source")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Installed" })).toBeInTheDocument();
+    expect(screen.getByText("Browse skills catalog")).toBeInTheDocument();
+    expect(screen.getByText("Explore sources")).toBeInTheDocument();
+    expect(screen.queryByText("Install from source")).not.toBeInTheDocument();
     expect(screen.getByTestId("installed-skill-brainstorming")).toBeInTheDocument();
-    expect(screen.getByTestId("recommended-skill-writing-plans")).toBeInTheDocument();
+    expect(screen.getByTestId("catalog-skill-writing-plans")).toBeInTheDocument();
+    expect(screen.getByTestId("catalog-view-list")).toBeInTheDocument();
+    expect(screen.getByTestId("catalog-view-gallery")).toBeInTheDocument();
+    expect(screen.getByTestId("explore-source-skills-sh")).toBeInTheDocument();
+    expect(screen.getByTestId("explore-source-agentskills-co-il")).toBeInTheDocument();
+  });
+
+  it("toggles browse between list and gallery views", () => {
+    render(
+      <AgentSkillsSettingsPanel
+        agent={buildAgent()}
+        catalogItems={[buildCatalogItem()]}
+        onSave={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTestId("catalog-results-list")).toBeInTheDocument();
+    expect(screen.queryByTestId("catalog-results-gallery")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("catalog-view-gallery"));
+    expect(screen.getByTestId("catalog-results-gallery")).toBeInTheDocument();
+    expect(screen.queryByTestId("catalog-results-list")).not.toBeInTheDocument();
+    expect(screen.getByTestId("catalog-skill-writing-plans")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("catalog-view-list"));
+    expect(screen.getByTestId("catalog-results-list")).toBeInTheDocument();
   });
 
   it("installs a recommended skill and saves the curated payload", async () => {
@@ -109,7 +141,7 @@ describe("AgentSkillsSettingsPanel", () => {
       />
     );
 
-    fireEvent.click(screen.getByTestId("install-recommended-writing-plans"));
+    fireEvent.click(screen.getByTestId("install-catalog-writing-plans"));
     fireEvent.click(screen.getByRole("button", { name: "Save skills" }));
 
     await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
@@ -121,131 +153,6 @@ describe("AgentSkillsSettingsPanel", () => {
           ref: "https://skills.sh/obra/superpowers/writing-plans",
           label: "Writing Plans",
           sourceKind: "curated"
-        })
-      ]
-    });
-  });
-
-  it("installs a manual skills.sh URL and saves it as a manual install", async () => {
-    const onSave = vi.fn().mockResolvedValue({
-      agent: buildAgent(),
-      workspaceSync: {
-        status: "deferred",
-        message: "No runtime exists yet. Skill artifacts will materialize during the next provision."
-      }
-    });
-
-    render(
-      <AgentSkillsSettingsPanel
-        agent={buildAgent()}
-        catalogItems={[]}
-        onSave={onSave}
-      />
-    );
-
-    fireEvent.change(
-      screen.getByPlaceholderText("https://skills.sh/obra/superpowers/writing-plans"),
-      {
-        target: {
-          value: "https://skills.sh/obra/superpowers/writing-plans"
-        }
-      }
-    );
-    fireEvent.click(screen.getByRole("button", { name: "Install source" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save skills" }));
-
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    expect(onSave.mock.calls[0]?.[0]).toEqual({
-      skills: ["writing-plans"],
-      installedSkills: [
-        expect.objectContaining({
-          key: "writing-plans",
-          ref: "https://skills.sh/obra/superpowers/writing-plans",
-          label: "Writing Plans",
-          sourceKind: "manual"
-        })
-      ]
-    });
-  });
-
-  it("installs a GitHub repo source when a manual key is supplied", async () => {
-    const onSave = vi.fn().mockResolvedValue({
-      agent: buildAgent(),
-      workspaceSync: {
-        status: "deferred",
-        message: "No runtime exists yet. Skill artifacts will materialize during the next provision."
-      }
-    });
-
-    render(
-      <AgentSkillsSettingsPanel
-        agent={buildAgent()}
-        catalogItems={[]}
-        onSave={onSave}
-      />
-    );
-
-    fireEvent.change(screen.getByPlaceholderText("https://skills.sh/obra/superpowers/writing-plans"), {
-      target: {
-        value: "https://github.com/obra/superpowers"
-      }
-    });
-    fireEvent.change(screen.getByPlaceholderText("writing-plans (optional)"), {
-      target: {
-        value: "writing-plans"
-      }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Install source" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save skills" }));
-
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    expect(onSave.mock.calls[0]?.[0]).toEqual({
-      skills: ["writing-plans"],
-      installedSkills: [
-        expect.objectContaining({
-          key: "writing-plans",
-          ref: "https://github.com/obra/superpowers",
-          label: "Writing Plans",
-          sourceKind: "manual"
-        })
-      ]
-    });
-  });
-
-  it("installs a Skills IL skill page source without an explicit key", async () => {
-    const onSave = vi.fn().mockResolvedValue({
-      agent: buildAgent(),
-      workspaceSync: {
-        status: "deferred",
-        message: "No runtime exists yet. Skill artifacts will materialize during the next provision."
-      }
-    });
-
-    render(
-      <AgentSkillsSettingsPanel
-        agent={buildAgent()}
-        catalogItems={[]}
-        onSave={onSave}
-      />
-    );
-
-    fireEvent.change(screen.getByPlaceholderText("https://skills.sh/obra/superpowers/writing-plans"), {
-      target: {
-        value: "https://agentskills.co.il/en/skills/localization/hebrew-document-generator"
-      }
-    });
-    fireEvent.click(screen.getByRole("button", { name: "Install source" }));
-    fireEvent.click(screen.getByRole("button", { name: "Save skills" }));
-
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1));
-    expect(onSave.mock.calls[0]?.[0]).toEqual({
-      skills: ["hebrew-document-generator"],
-      installedSkills: [
-        expect.objectContaining({
-          key: "hebrew-document-generator",
-          ref: "https://agentskills.co.il/en/skills/localization/hebrew-document-generator",
-          label: "Hebrew Document Generator",
-          sourceKind: "manual"
         })
       ]
     });
@@ -294,5 +201,110 @@ describe("AgentSkillsSettingsPanel", () => {
         })
       ]
     });
+  });
+
+  it("filters the browse catalog and resets source filter when All is selected", () => {
+    render(
+      <AgentSkillsSettingsPanel
+        agent={buildAgent({
+          skills: ["brainstorming"],
+          installedSkills: [buildInstalledSkill()]
+        })}
+        catalogItems={[
+          buildCatalogItem({
+            key: "brainstorming",
+            ref: "https://skills.sh/obra/superpowers/brainstorming",
+            label: "Brainstorming",
+            summary: "Explore options before locking direction.",
+            provider: "obra/superpowers",
+            sourceHost: "skills.sh",
+            recommendedForCurrentPreset: false,
+            originCategories: ["strategy"],
+            metadataStatus: "remote",
+            sourcePresets: [
+              {
+                presetId: "growth-strategy",
+                presetName: "Growth & Strategy"
+              }
+            ]
+          }),
+          buildCatalogItem({
+            key: "skills-il-skill-creator",
+            ref: "https://agentskills.co.il/en/skills/developer-tools/skills-il-skill-creator",
+            label: "Skills IL Skill Creator",
+            summary: "Interactive workflow for creating new skills.",
+            provider: "skills-il/developer-tools",
+            sourceHost: "agentskills.co.il",
+            recommendedForCurrentPreset: false,
+            originCategories: ["external-developer-tools"],
+            metadataStatus: "remote",
+            sourcePresets: [
+              {
+                presetId: "project-manager:related:agentskills:developer-tools",
+                presetName: "Skills IL · Developer Tools"
+              }
+            ]
+          }),
+          buildCatalogItem()
+        ]}
+        onSave={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTestId("catalog-skill-brainstorming")).not.toBeInTheDocument();
+    expect(screen.getByTestId("catalog-skill-skills-il-skill-creator")).toBeInTheDocument();
+    expect(screen.getByTestId("catalog-skill-writing-plans")).toBeInTheDocument();
+    expect(screen.queryByTestId("catalog-filter-installed")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("catalog-filter-enabled")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("catalog-filter-preset"));
+    expect(screen.queryByTestId("catalog-skill-brainstorming")).not.toBeInTheDocument();
+    expect(screen.getByTestId("catalog-skill-writing-plans")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("catalog-filter-all"));
+    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(screen.getByRole("option", { name: "skills.sh" }));
+    expect(screen.queryByTestId("catalog-skill-brainstorming")).not.toBeInTheDocument();
+    expect(screen.getByTestId("catalog-skill-writing-plans")).toBeInTheDocument();
+    expect(screen.queryByTestId("catalog-skill-skills-il-skill-creator")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("catalog-filter-all"));
+    expect(screen.getByTestId("catalog-skill-skills-il-skill-creator")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByPlaceholderText("Search by skill name, key, source, or description"), {
+      target: {
+        value: "structured implementation"
+      }
+    });
+    expect(screen.queryByTestId("catalog-skill-brainstorming")).not.toBeInTheDocument();
+    expect(screen.getByTestId("catalog-skill-writing-plans")).toBeInTheDocument();
+  });
+
+  it("paginates catalog entries with 15 items per page", () => {
+    const catalogItems = Array.from({ length: 18 }, (_, index) => {
+      const order = String(index + 1).padStart(2, "0");
+      return buildCatalogItem({
+        key: `skill-${order}`,
+        ref: `https://skills.sh/example/repo/skill-${order}`,
+        label: `Skill ${order}`,
+        sourceHost: "skills.sh",
+        recommendedForCurrentPreset: false
+      });
+    });
+
+    render(
+      <AgentSkillsSettingsPanel
+        agent={buildAgent()}
+        catalogItems={catalogItems}
+        onSave={vi.fn()}
+      />
+    );
+
+    expect(screen.getByTestId("catalog-skill-skill-01")).toBeInTheDocument();
+    expect(screen.queryByTestId("catalog-skill-skill-18")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByTestId("catalog-page-next"));
+    expect(screen.getByTestId("catalog-skill-skill-18")).toBeInTheDocument();
+    expect(screen.queryByTestId("catalog-skill-skill-01")).not.toBeInTheDocument();
   });
 });

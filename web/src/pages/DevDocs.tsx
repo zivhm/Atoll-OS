@@ -7,7 +7,6 @@ import {
   Download,
   Loader2,
   PencilLine,
-  Rows3,
   ShieldCheck,
   Sparkles,
 } from "lucide-react";
@@ -94,6 +93,7 @@ const EMPTY_PRESET_DRAFT: PresetDraft = {
 };
 
 const IDENTITY_CATALOG_VIEW_STORAGE_KEY = "atoll-identity-catalog-view";
+type IdentityCatalogView = "card" | "gallery";
 
 export default function DevDocs() {
   const queryClient = useQueryClient();
@@ -103,11 +103,11 @@ export default function DevDocs() {
   const [presetDraft, setPresetDraft] = useState<PresetDraft>(EMPTY_PRESET_DRAFT);
   const [presetJson, setPresetJson] = useState("");
   const [searchValue, setSearchValue] = useState("");
-  const [catalogCompact, setCatalogCompact] = useState(() => {
+  const [catalogView, setCatalogView] = useState<IdentityCatalogView>(() => {
     if (typeof window === "undefined") {
-      return false;
+      return "card";
     }
-    return window.localStorage.getItem(IDENTITY_CATALOG_VIEW_STORAGE_KEY) === "compact";
+    return parseIdentityCatalogView(window.localStorage.getItem(IDENTITY_CATALOG_VIEW_STORAGE_KEY));
   });
   const [jsonPanelOpen, setJsonPanelOpen] = useState(false);
   const adminPresetsQuery = useQuery({
@@ -158,9 +158,9 @@ export default function DevDocs() {
     }
     window.localStorage.setItem(
       IDENTITY_CATALOG_VIEW_STORAGE_KEY,
-      catalogCompact ? "compact" : "expanded"
+      catalogView
     );
-  }, [catalogCompact]);
+  }, [catalogView]);
 
   const presetMutation = useMutation({
     mutationFn: async (
@@ -272,8 +272,8 @@ export default function DevDocs() {
         setPresetJson={setPresetJson}
         searchValue={searchValue}
         setSearchValue={setSearchValue}
-        catalogCompact={catalogCompact}
-        setCatalogCompact={setCatalogCompact}
+        catalogView={catalogView}
+        setCatalogView={setCatalogView}
         jsonPanelOpen={jsonPanelOpen}
         setJsonPanelOpen={setJsonPanelOpen}
         presetMutation={presetMutation}
@@ -298,8 +298,8 @@ function IdentityTypesSection({
   setPresetJson,
   searchValue,
   setSearchValue,
-  catalogCompact,
-  setCatalogCompact,
+  catalogView,
+  setCatalogView,
   jsonPanelOpen,
   setJsonPanelOpen,
   presetMutation,
@@ -319,8 +319,8 @@ function IdentityTypesSection({
   setPresetJson: (value: string) => void;
   searchValue: string;
   setSearchValue: (value: string) => void;
-  catalogCompact: boolean;
-  setCatalogCompact: (value: boolean) => void;
+  catalogView: IdentityCatalogView;
+  setCatalogView: (value: IdentityCatalogView) => void;
   jsonPanelOpen: boolean;
   setJsonPanelOpen: (value: boolean) => void;
   presetMutation: ReturnType<typeof useMutation>;
@@ -354,14 +354,25 @@ function IdentityTypesSection({
               <Sparkles className="h-4 w-4" />
               {isCreatingNewPreset ? "Creating new identity" : "New identity"}
             </Button>
+          </div>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="Catalog layout">
             <Button
-              variant={catalogCompact ? "default" : "outline"}
-              size="icon"
-              aria-label="Compact catalog"
-              title="Compact catalog"
-              onClick={() => setCatalogCompact(!catalogCompact)}
+              type="button"
+              variant={catalogView === "card" ? "default" : "outline"}
+              size="sm"
+              aria-label="List view"
+              onClick={() => setCatalogView("card")}
             >
-              <Rows3 className="h-4 w-4" />
+              List
+            </Button>
+            <Button
+              type="button"
+              variant={catalogView === "gallery" ? "default" : "outline"}
+              size="sm"
+              aria-label="Gallery view"
+              onClick={() => setCatalogView("gallery")}
+            >
+              Gallery
             </Button>
           </div>
         </CardHeader>
@@ -378,7 +389,14 @@ function IdentityTypesSection({
             </div>
           </div>
           <ScrollArea className="h-[44rem] pr-3">
-            <div className="space-y-3" data-testid="identity-catalog-list">
+            <div
+              className={
+                catalogView === "gallery"
+                  ? "grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3"
+                  : "space-y-3"
+              }
+              data-testid="identity-catalog-list"
+            >
               {filteredPresets.map((preset, index) => (
                 <IdentityCatalogItem
                   key={preset.id}
@@ -391,7 +409,7 @@ function IdentityTypesSection({
                   setIsEditorOpen={setIsEditorOpen}
                   presetMutation={presetMutation}
                   presetOrderIds={presetOrderIds}
-                  compact={catalogCompact}
+                  view={catalogView}
                 />
               ))}
             </div>
@@ -735,12 +753,12 @@ function IdentityCatalogItem({
   setIsEditorOpen,
   presetMutation,
   presetOrderIds,
-  compact,
+  view,
 }: IdentityEditorControlsProps & {
   preset: AdminAgentPreset;
   index: number;
   presetOrderIds: string[];
-  compact: boolean;
+  view: IdentityCatalogView;
 }) {
   const selectPreset = () => {
     setSelectedPresetId(preset.id);
@@ -749,22 +767,24 @@ function IdentityCatalogItem({
     setIsEditorOpen(true);
   };
 
-  if (compact) {
+  if (view === "gallery") {
     return (
       <div
         data-testid={`identity-item-${preset.id}`}
-        data-layout="compact"
-        className="rounded-2xl border border-border/70 bg-background/70 px-4 py-3"
+        data-layout="gallery"
+        className="flex h-full flex-col rounded-3xl border border-border/70 bg-background/70 p-4"
       >
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <PaletteChip token={preset.color as IdentityColorToken} compact />
-            <p className="truncate text-sm font-semibold text-foreground">{preset.name}</p>
-            <p className="truncate text-xs uppercase tracking-[0.18em] text-muted-foreground">
-              {formatPresetCategory(preset.category)} · {preset.active ? "Active" : "Archived"}
-            </p>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1 space-y-2">
+            <div className="flex flex-wrap items-center gap-2">
+              <PaletteChip token={preset.color as IdentityColorToken} compact />
+              <p className="text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                {formatPresetCategory(preset.category)} · {preset.active ? "Active" : "Archived"}
+              </p>
+            </div>
+            <p className="line-clamp-1 text-base font-semibold text-foreground">{preset.name}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-1">
             <Button
               size="icon"
               variant="ghost"
@@ -791,28 +811,34 @@ function IdentityCatalogItem({
             >
               <ArrowDown className="h-4 w-4" />
             </Button>
-            <Button
-              variant={selectedPresetId === preset.id ? "default" : "outline"}
-              size="sm"
-              onClick={selectPreset}
-            >
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={presetMutation.isPending}
-              onClick={() =>
-                void presetMutation.mutateAsync({
-                  type: "archive",
-                  presetId: preset.id,
-                  archived: preset.active,
-                })
-              }
-            >
-              {preset.active ? "Archive" : "Restore"}
+            <Button size="icon" variant="ghost" onClick={selectPreset}>
+              <PencilLine className="h-4 w-4" />
             </Button>
           </div>
+        </div>
+        <p className="mt-3 line-clamp-3 text-sm text-muted-foreground">{preset.summary}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Button
+            variant={selectedPresetId === preset.id ? "default" : "outline"}
+            size="sm"
+            onClick={selectPreset}
+          >
+            Edit
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={presetMutation.isPending}
+            onClick={() =>
+              void presetMutation.mutateAsync({
+                type: "archive",
+                presetId: preset.id,
+                archived: preset.active,
+              })
+            }
+          >
+            {preset.active ? "Archive" : "Restore"}
+          </Button>
         </div>
       </div>
     );
@@ -821,7 +847,7 @@ function IdentityCatalogItem({
   return (
     <div
       data-testid={`identity-item-${preset.id}`}
-      data-layout="expanded"
+      data-layout="card"
       className="rounded-3xl border border-border/70 bg-background/70 p-4"
     >
       <div className="flex items-start justify-between gap-3">
@@ -1011,6 +1037,13 @@ function parseRecommendedSkillsInput(value: string): string[] {
     .split(/[\n,]/u)
     .map((item) => item.trim())
     .filter(Boolean);
+}
+
+function parseIdentityCatalogView(value: string | null): IdentityCatalogView {
+  if (value === "gallery" || value === "compact") {
+    return "gallery";
+  }
+  return "card";
 }
 
 function toAdminPresetFallbacks(presets: AgentPreset[]): AdminAgentPreset[] {

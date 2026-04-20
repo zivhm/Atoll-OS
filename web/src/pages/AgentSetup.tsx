@@ -47,6 +47,7 @@ import {
   type Tenant,
 } from "@/lib/api";
 import { createRandomAgentAvatar } from "@/lib/agent-avatar";
+import { refreshPostLaunchQueries } from "@/lib/agent-setup";
 import {
   buildInitialProvisionWizardState,
   getVisibleRuntimeCatalog,
@@ -386,20 +387,14 @@ export default function AgentSetup() {
         agentId: agent.id,
       };
     },
-    onSuccess: async (result) => {
+    onSuccess: (result) => {
       if (isOnboardingMode) {
         markHelperCreated();
       }
+      setJobStatus("Provisioning completed. Opening helper...");
       toast.success("Helper setup completed");
-      await Promise.all([
-        queryClient.invalidateQueries({ queryKey: ["instances"] }),
-        queryClient.invalidateQueries({ queryKey: ["agents"] }),
-        queryClient.invalidateQueries({ queryKey: ["tenants"] }),
-        queryClient.invalidateQueries({ queryKey: ["events"] }),
-        queryClient.invalidateQueries({ queryKey: ["provision-jobs"] }),
-        queryClient.invalidateQueries({ queryKey: ["provision-requests"] }),
-      ]);
-          navigate(`/agents/${encodeURIComponent(result.agentId)}`);
+      refreshPostLaunchQueries(queryClient);
+      navigate(`/agents/${encodeURIComponent(result.agentId)}`);
     },
     onError: (error) => {
       const message = getErrorMessage(error, "Setup failed");

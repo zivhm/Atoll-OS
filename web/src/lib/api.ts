@@ -9,6 +9,7 @@ export type RuntimeChatTransport = "openclaw-gateway" | "http-message" | "openai
 export type RuntimeConfigFieldKind = "string" | "number" | "boolean" | "json";
 export type SettingsConfigFieldKind = "text" | "boolean" | "select";
 export type AgentInstalledSkillSourceKind = "manual" | "preset" | "curated" | "legacy";
+export type AgentSkillMetadataStatus = "local" | "remote" | "stale";
 
 export interface RuntimeConnectorCapabilities {
   llmConfig: boolean;
@@ -175,6 +176,12 @@ export interface AgentSkillCatalogItem {
   label: string;
   installed: boolean;
   enabled: boolean;
+  summary: string;
+  provider: string;
+  sourceHost: string;
+  recommendedForCurrentPreset: boolean;
+  originCategories: string[];
+  metadataStatus: AgentSkillMetadataStatus;
   sourcePresets: Array<{
     presetId: string;
     presetName: string;

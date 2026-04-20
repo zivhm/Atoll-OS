@@ -2,8 +2,12 @@ import type { FastifyInstance, FastifyRequest } from "fastify";
 
 import {
   buildAgentSkillCatalog,
-  buildInstalledSkillsFromRefs
+  buildInstalledSkillsFromRefs,
+  discoverExternalSkillPresets,
+  enrichAgentSkillCatalogItems,
+  type AgentSkillCatalogItem
 } from "../../agent-skills.js";
+import type { AgentPresetCatalogItem } from "../../agent-presets.js";
 import { listAgentTypes } from "../../agent-types.js";
 import {
   buildAgentPresetExportSnapshot,
@@ -35,9 +39,22 @@ export function registerTenantAgentRoutes(
     store: Store;
     getAuthContextOrThrow: (request: FastifyRequest) => AuthContext;
     runtimeProvider?: RuntimeProvider;
+    discoverSkillPresets?: (input: {
+      currentPresetId?: string;
+      currentPresetCategory?: string;
+    }) => Promise<AgentPresetCatalogItem[]>;
+    enrichSkillCatalogItems?: (
+      items: AgentSkillCatalogItem[]
+    ) => Promise<AgentSkillCatalogItem[]>;
   }
 ): void {
-  const { store, getAuthContextOrThrow, runtimeProvider } = deps;
+  const {
+    store,
+    getAuthContextOrThrow,
+    runtimeProvider,
+    discoverSkillPresets,
+    enrichSkillCatalogItems
+  } = deps;
 
   app.get("/api/agent-types", async () => {
     return {
@@ -249,12 +266,49 @@ export function registerTenantAgentRoutes(
       });
     }
 
+    const basePresets = store.listAgentPresets({ activeOnly: true });
+    const currentPreset = agent.presetId ? store.getAgentPreset(agent.presetId) : undefined;
+    const discoverPresets =
+      discoverSkillPresets ??
+      ((input: { currentPresetId?: string; currentPresetCategory?: string }) =>
+        discoverExternalSkillPresets({
+          currentPresetId: input.currentPresetId,
+          currentPresetCategory: input.currentPresetCategory
+        }));
+
+    let extraPresets: AgentPresetCatalogItem[] = [];
+    try {
+      extraPresets = await discoverPresets({
+        currentPresetId: agent.presetId,
+        currentPresetCategory: currentPreset?.category
+      });
+    } catch {
+      extraPresets = [];
+    }
+
+    const localCatalogItems = buildAgentSkillCatalog({
+      presets: [...basePresets, ...extraPresets],
+      installedSkills: agent.installedSkills,
+      enabledSkills: agent.skills,
+      currentPresetId: agent.presetId
+    });
+
+    const remoteEnricher =
+      enrichSkillCatalogItems ??
+      ((items: AgentSkillCatalogItem[]) =>
+        enrichAgentSkillCatalogItems({
+          items
+        }));
+
+    let catalogItems = localCatalogItems;
+    try {
+      catalogItems = await remoteEnricher(localCatalogItems);
+    } catch {
+      catalogItems = localCatalogItems;
+    }
+
     return {
-      items: buildAgentSkillCatalog({
-        presets: store.listAgentPresets({ activeOnly: true }),
-        installedSkills: agent.installedSkills,
-        enabledSkills: agent.skills
-      })
+      items: catalogItems
     };
   });
 
