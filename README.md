@@ -144,27 +144,6 @@ Reusable identity presets live under [`src/business-identities`](src/business-id
 
 ---
 
-## 🏗 Architecture
-
-```
-┌─────────────────────────────────────────────┐
-│                  Web UI                     │
-│                                             │
-└────────────────────┬────────────────────────┘
-                     │ /api
-┌────────────────────▼────────────────────────┐
-│                 API Layer                   │
-│                                             │
-└──────┬──────────────────────────────────────┘
-       │
-┌──────▼──────┐     ┌──────────────────────┐
-│ Persistence │     │   Runtime Host       │
-└─────────────┘     │   Docker engine      │
-                    └──────────────────────┘
-```
-
----
-
 ## ⚙️ Configuration
 
 All important configuration lives in the repo-root `.env`.
@@ -197,12 +176,6 @@ Runtime image sources:
 
 GUI sidecar runtime options (available on all runtime types):
 - `gui.enabled`: create and reconcile a GUI sidecar for the runtime container.
-- `gui.enableVnc`: enable `x11vnc` + `noVNC` inside the sidecar.
-- `gui.noVncPort`: optional host loopback port mapped to sidecar `6080` when VNC is enabled.
-
-Runtime container environment contract for GUI automation:
-- `ATOLL_GUI_PLAYWRIGHT_WS_ENDPOINT`: deterministic Playwright endpoint (example: `ws://atoll-gui-<runtime>:3000/playwright`).
-- `ATOLL_GUI_SIDECAR_CONTAINER`: resolved sidecar container name on the runtime network.
 
 ---
 
@@ -251,13 +224,6 @@ atoll-state.json          Local persisted state file
 | Default hosted model | `anthropic/claude-sonnet-4.6` |
 | Long-term direction | Harness/Provider-agnostic runtime support |
 
-### Runtime Support Matrix
-
-| Runtime | Status | Chat transport | Messaging surface |
-| --- | --- | --- | --- |
-| OpenClaw | Supported | Native OpenClaw gateway websocket | Shared Telegram, Slack, Discord controls |
-| ZeroClaw | Supported | HTTP webhook/message bridge | Shared Telegram controls, pairing/webhook flows |
-| Hermes | Supported | OpenAI-compatible API server (`/v1/chat/completions`) | Shared Telegram/Slack overlap plus Hermes-native advanced runtime config |
 ---
 
 ## 🌐 Landing Page
