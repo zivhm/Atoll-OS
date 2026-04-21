@@ -11,7 +11,11 @@ import {
   createStore,
   type RuntimeEventAction,
   type RuntimeEventOutcome,
-  type RuntimeInstance
+  type RuntimeInstance,
+  type RuntimeTraceEventKind,
+  type RuntimeTraceRun,
+  type RuntimeTraceTransport,
+  type RuntimeType
 } from "./store.js";
 import { type VerifiedAuthToken } from "./auth.js";
 import {
@@ -51,7 +55,6 @@ import {
   resolveSupportedRuntimeTypes,
   resolveRuntimeImageForType
 } from "./runtime-kind.js";
-import type { RuntimeType } from "./store.js";
 import { getEnvValue, loadEnvFileIfPresent } from "./ops-env.js";
 import {
   resolveRuntimeSharedWorkspaceMount,
@@ -300,6 +303,23 @@ export async function buildApp(options: BuildAppOptions = {}) {
       store.listRuntimeChatMessages({
         instanceId: input.instanceId,
         limit: input.limit
+      }),
+    listRuntimeTraceRuns: (input) =>
+      store.listRuntimeTraceRuns({
+        instanceId: input.instanceId,
+        limit: input.limit
+      }),
+    getRuntimeTraceRun: (traceId) => store.getRuntimeTraceRun(traceId),
+    createRuntimeTraceRun: (input) => store.createRuntimeTraceRun(input),
+    updateRuntimeTraceRun: (traceId, patch) => store.updateRuntimeTraceRun(traceId, patch),
+    listRuntimeTraceEvents: (input) => store.listRuntimeTraceEvents({ runId: input.runId }),
+    appendRuntimeTraceEvent: (input) =>
+      store.appendRuntimeTraceEvent({
+        runId: input.runId,
+        kind: input.kind,
+        createdAt: input.createdAt,
+        summary: input.summary,
+        data: input.data
       }),
     toPublicRuntimeInstance,
     resolveRuntimeCreationInput,
@@ -1294,7 +1314,6 @@ export async function buildApp(options: BuildAppOptions = {}) {
       metadata: input.metadata
     });
   }
-
 }
 
 function resolvePublicRoot(explicitPublicRoot?: string): string | undefined {

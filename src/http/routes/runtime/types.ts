@@ -3,7 +3,15 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import type { RuntimeCatalogItem } from "../../../runtime-kind.js";
 import type { RuntimeReconcileAction } from "../../../runtime-reconcile.js";
 import type { RuntimeProvider } from "../../../runtime-provider.js";
-import type { RuntimeChatMessage, RuntimeInstance, RuntimeType, Store } from "../../../store.js";
+import type {
+  RuntimeChatMessage,
+  RuntimeInstance,
+  RuntimeTraceEvent,
+  RuntimeTraceEventKind,
+  RuntimeTraceRun,
+  RuntimeType,
+  Store
+} from "../../../store.js";
 
 export type RuntimeRouteAuthContext = {
   sub: string;
@@ -78,6 +86,24 @@ export type RuntimeRouteDeps = {
     instanceId: string;
     limit?: number;
   }) => RuntimeChatMessage[];
+  listRuntimeTraceRuns: (input: {
+    instanceId?: string;
+    limit?: number;
+  }) => RuntimeTraceRun[];
+  getRuntimeTraceRun: (traceId: string) => RuntimeTraceRun | undefined;
+  createRuntimeTraceRun: (input: Omit<RuntimeTraceRun, "id">) => RuntimeTraceRun;
+  updateRuntimeTraceRun: (
+    traceId: string,
+    patch: Partial<Omit<RuntimeTraceRun, "id">>
+  ) => RuntimeTraceRun | undefined;
+  listRuntimeTraceEvents: (input: { runId: string }) => RuntimeTraceEvent[];
+  appendRuntimeTraceEvent: (input: {
+    runId: string;
+    kind: RuntimeTraceEventKind;
+    createdAt?: string;
+    summary: string;
+    data?: Record<string, unknown>;
+  }) => RuntimeTraceEvent;
   resolveRuntimeCreationInput: (input: {
     tenantId: string;
     agentId: string;

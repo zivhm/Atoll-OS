@@ -389,6 +389,69 @@ export interface RuntimeChatMessage {
   metadata?: Record<string, unknown>;
 }
 
+export interface RuntimeTraceUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+}
+
+export interface RuntimeTraceRun {
+  id: string;
+  requestId?: string;
+  tenantId: string;
+  agentId: string;
+  instanceId: string;
+  runtimeType: RuntimeType;
+  transport: RuntimeChatTransport;
+  model: string;
+  status: "started" | "succeeded" | "failed";
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  userMessageId?: string;
+  assistantMessageId?: string;
+  errorMessageId?: string;
+  toolCallCount: number;
+  usage?: RuntimeTraceUsage;
+  finishReason?: string;
+  failureClass?: string;
+  failureMessage?: string;
+  lastEventKind?:
+    | "run_started"
+    | "request_built"
+    | "request_sent"
+    | "response_received"
+    | "assistant_text_extracted"
+    | "tool_calls_observed"
+    | "gateway_event"
+    | "run_succeeded"
+    | "run_failed";
+}
+
+export interface RuntimeTraceEvent {
+  id: string;
+  runId: string;
+  sequence: number;
+  kind:
+    | "run_started"
+    | "request_built"
+    | "request_sent"
+    | "response_received"
+    | "assistant_text_extracted"
+    | "tool_calls_observed"
+    | "gateway_event"
+    | "run_succeeded"
+    | "run_failed";
+  createdAt: string;
+  summary: string;
+  data?: Record<string, unknown>;
+}
+
+export interface RuntimeTraceRunDetail {
+  run: RuntimeTraceRun;
+  events: RuntimeTraceEvent[];
+}
+
 export interface RuntimeChatSendInput {
   message: string;
   token?: string;
@@ -399,6 +462,10 @@ export interface RuntimeChatSendResponse {
   assistantMessage?: RuntimeChatMessage;
   errorMessage?: RuntimeChatMessage;
   raw?: Record<string, unknown>;
+}
+
+export interface RuntimeTraceExportResponse extends RuntimeTraceRunDetail {
+  exportedAt: string;
 }
 
 export interface RuntimeSlackOnboardingChecklistItem {
@@ -884,6 +951,36 @@ export async function sendRuntimeChat(
     method: "POST",
     body: input,
   });
+}
+
+export async function listRuntimeTraces(
+  instanceId: string,
+  limit = 25
+): Promise<RuntimeTraceRun[]> {
+  const params = new URLSearchParams();
+  params.set("limit", String(limit));
+  const response = await apiRequest<{ items: RuntimeTraceRun[] }>(
+    `/api/runtime/instances/${encodeURIComponent(instanceId)}/traces?${params.toString()}`
+  );
+  return response.items;
+}
+
+export async function getRuntimeTrace(
+  instanceId: string,
+  traceId: string
+): Promise<RuntimeTraceRunDetail> {
+  return apiRequest<RuntimeTraceRunDetail>(
+    `/api/runtime/instances/${encodeURIComponent(instanceId)}/traces/${encodeURIComponent(traceId)}`
+  );
+}
+
+export async function exportRuntimeTrace(
+  instanceId: string,
+  traceId: string
+): Promise<RuntimeTraceExportResponse> {
+  return apiRequest<RuntimeTraceExportResponse>(
+    `/api/runtime/instances/${encodeURIComponent(instanceId)}/traces/${encodeURIComponent(traceId)}/export`
+  );
 }
 
 export async function getRuntimePairingInfo(instanceId: string): Promise<PairingInfoResponse> {

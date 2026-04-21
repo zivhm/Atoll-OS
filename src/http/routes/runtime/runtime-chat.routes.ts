@@ -3,10 +3,16 @@ import { randomBytes, randomUUID } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 
 import { buildFailurePayload } from "../../../errors.js";
-import { sanitizeApiPayload } from "../../../response-sanitizer.js";
+import { redactSensitiveText, sanitizeApiPayload } from "../../../response-sanitizer.js";
 import { getRuntimeConnector } from "../../../runtime-kind.js";
 import { parsePositiveIntegerUnknown, parseRuntimeChatInput } from "../../../parsers.js";
-import type { RuntimeChatMessage, RuntimeInstance, RuntimeType } from "../../../store.js";
+import type {
+  RuntimeChatMessage,
+  RuntimeInstance,
+  RuntimeTraceEventKind,
+  RuntimeTraceTransport,
+  RuntimeType
+} from "../../../store.js";
 import { hasTimeout, resolveTimeoutSignal } from "../http-timeout.js";
 import { resolveRuntimeHttpBaseUrl } from "./runtime-base-url.js";
 import { resolveRuntimeWebSocketCtor } from "./runtime-websocket.js";
@@ -29,6 +35,14 @@ type RuntimeChatAdapterResponse = {
   resolvedBaseUrl: string;
   raw: Record<string, unknown> | null;
   assistantText: string;
+  statusCode?: number;
+  usage?: {
+    inputTokens?: number;
+    outputTokens?: number;
+    totalTokens?: number;
+  };
+  finishReason?: string;
+  toolCalls?: RuntimeObservedToolCall[];
 };
 
 type RuntimeChatExecutionResult =
@@ -86,6 +100,27 @@ type OpenClawTerminalChatPayload = {
   message?: unknown;
 };
 
+type RuntimeObservedToolCall = {
+  id?: string;
+  type?: string;
+  name?: string;
+  argumentsPreview?: string;
+};
+
+type RuntimeChatTraceRecorder = {
+  runId: string;
+  startedAtMs: number;
+  record: (
+    kind: RuntimeTraceEventKind,
+    summary: string,
+    data?: Record<string, unknown>,
+    createdAt?: string
+  ) => void;
+  updateRun: (patch: Record<string, unknown>) => void;
+  succeed: (patch?: Record<string, unknown>) => void;
+  fail: (patch?: Record<string, unknown>) => void;
+};
+
 export function registerRuntimeChatRoutes(app: FastifyInstance, deps: RuntimeRouteDeps): void {
   const {
     config,
@@ -97,6 +132,9 @@ export function registerRuntimeChatRoutes(app: FastifyInstance, deps: RuntimeRou
     appendRuntimeEvent,
     appendRuntimeChatMessage,
     listRuntimeChatMessages,
+    createRuntimeTraceRun,
+    updateRuntimeTraceRun,
+    appendRuntimeTraceEvent
   } = deps;
 
   app.get("/api/runtime/instances/:instanceId/chat-messages", async (request, reply) => {
@@ -140,6 +178,9 @@ export function registerRuntimeChatRoutes(app: FastifyInstance, deps: RuntimeRou
         parseJsonObject,
         appendRuntimeEvent,
         appendRuntimeChatMessage,
+        createRuntimeTraceRun,
+        updateRuntimeTraceRun,
+        appendRuntimeTraceEvent
       },
       runtimeInstance,
       message: input.message,
@@ -180,12 +221,16 @@ async function executeRuntimeChatRequest(input: {
     | "parseJsonObject"
     | "appendRuntimeEvent"
     | "appendRuntimeChatMessage"
+    | "createRuntimeTraceRun"
+    | "updateRuntimeTraceRun"
+    | "appendRuntimeTraceEvent"
   >;
   runtimeInstance: RuntimeInstance;
   message: string;
   requestId?: string;
   token?: string;
 }): Promise<RuntimeChatExecutionResult> {
+  const traceStartedAtMs = Date.now();
   let runtimeInstance = input.runtimeInstance;
   const resolvedToken = await resolveRuntimeChatToken({
     config: input.deps.config,
@@ -221,6 +266,20 @@ async function executeRuntimeChatRequest(input: {
     requestId: input.requestId,
   });
   const runtimeAwareMessage = buildRuntimeAwareMessage(runtimeInstance, input.message);
+  const trace = createRuntimeChatTraceRecorder({
+    deps: input.deps,
+    runtimeInstance,
+    requestId: input.requestId,
+    userMessageId: userMessage.id,
+    startedAtMs: traceStartedAtMs
+  });
+  trace.record("run_started", "Accepted runtime chat request.", {
+    runtimeType: runtimeInstance.runtimeType,
+    transport: getRuntimeConnector(runtimeInstance.runtimeType).chatTransport,
+    model: runtimeInstance.llmModel,
+    requestId: input.requestId,
+    userMessageId: userMessage.id
+  });
 
   try {
     const result = await sendRuntimeChatMessage({
@@ -231,6 +290,7 @@ async function executeRuntimeChatRequest(input: {
       message: runtimeAwareMessage,
       requestId: input.requestId,
       token,
+      trace,
     });
 
     if (result.resolvedBaseUrl !== runtimeInstance.baseUrl) {
@@ -251,6 +311,27 @@ async function executeRuntimeChatRequest(input: {
       content: result.assistantText,
       requestId: input.requestId,
       metadata: sanitizedRaw ?? undefined,
+    });
+    trace.record("assistant_text_extracted", "Extracted assistant text from runtime response.", {
+      assistantPreview: buildAssistantPreview(result.assistantText),
+      assistantLength: result.assistantText.length,
+      assistantMessageId: assistantMessage.id
+    });
+    trace.succeed({
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - trace.startedAtMs,
+      assistantMessageId: assistantMessage.id,
+      toolCallCount: result.toolCalls?.length ?? 0,
+      usage: result.usage,
+      finishReason: result.finishReason,
+      lastEventKind: "run_succeeded"
+    });
+    trace.record("run_succeeded", "Runtime chat request completed successfully.", {
+      assistantMessageId: assistantMessage.id,
+      durationMs: Date.now() - trace.startedAtMs,
+      toolCallCount: result.toolCalls?.length ?? 0,
+      usage: result.usage,
+      finishReason: result.finishReason
     });
 
     input.deps.appendRuntimeEvent({
@@ -285,6 +366,19 @@ async function executeRuntimeChatRequest(input: {
         content: message,
         requestId: input.requestId,
         metadata: sanitizedRaw ?? undefined,
+      });
+      trace.fail({
+        finishedAt: new Date().toISOString(),
+        durationMs: Date.now() - trace.startedAtMs,
+        errorMessageId: errorMessage.id,
+        failureMessage: message,
+        lastEventKind: "run_failed"
+      });
+      trace.record("run_failed", "Runtime chat request failed.", {
+        statusCode: error.statusCode,
+        errorMessageId: errorMessage.id,
+        failureMessage: message,
+        response: summarizeResponsePayload(sanitizedRaw)
       });
 
       input.deps.appendRuntimeEvent({
@@ -327,6 +421,20 @@ async function executeRuntimeChatRequest(input: {
         failureHint: failure.failureHint,
       },
     });
+    trace.fail({
+      finishedAt: new Date().toISOString(),
+      durationMs: Date.now() - trace.startedAtMs,
+      errorMessageId: errorMessage.id,
+      failureClass: failure.failureClass,
+      failureMessage: failure.message,
+      lastEventKind: "run_failed"
+    });
+    trace.record("run_failed", "Runtime chat request failed before a runtime response completed.", {
+      failureClass: failure.failureClass,
+      failureHint: failure.failureHint,
+      errorMessageId: errorMessage.id,
+      failureMessage: failure.message
+    });
     input.deps.appendRuntimeEvent({
       requestId: input.requestId,
       tenantId: runtimeInstance.tenantId,
@@ -362,6 +470,7 @@ async function sendRuntimeChatMessage(input: {
   message: string;
   requestId?: string;
   token?: string;
+  trace: RuntimeChatTraceRecorder;
 }): Promise<RuntimeChatAdapterResponse> {
   const connector = getRuntimeConnector(input.runtimeInstance.runtimeType);
   if (connector.chatTransport === "openclaw-gateway") {
@@ -539,6 +648,7 @@ async function sendHttpRuntimeChatMessage(input: {
   parseJsonObject: RuntimeRouteDeps["parseJsonObject"];
   message: string;
   token?: string;
+  trace: RuntimeChatTraceRecorder;
 }): Promise<RuntimeChatAdapterResponse> {
   const connector = getRuntimeConnector(input.runtimeInstance.runtimeType);
   const runtimeBaseUrl = await resolveRuntimeHttpBaseUrl({
@@ -575,6 +685,19 @@ async function sendHttpRuntimeChatMessage(input: {
   }
 
   const body = buildRuntimeChatRequestBody(input.runtimeInstance, input.message);
+  input.trace.record("request_built", "Built runtime chat request payload.", {
+    runtimeType: input.runtimeInstance.runtimeType,
+    transport: connector.chatTransport,
+    baseUrl: runtimeBaseUrl,
+    endpoint,
+    headers: sanitizeApiPayload(headers),
+    body: buildTraceRequestBodySummary(body)
+  });
+  input.trace.record("request_sent", "Sent runtime chat request to runtime endpoint.", {
+    method: "POST",
+    url: `${runtimeBaseUrl}${endpoint}`,
+    timeoutMs: input.config.runtimeHttpTimeoutMs
+  });
   const response = await fetch(`${runtimeBaseUrl}${endpoint}`, {
     method: "POST",
     headers,
@@ -583,6 +706,23 @@ async function sendHttpRuntimeChatMessage(input: {
   });
 
   const raw = await input.parseJsonObject(response);
+  const sanitizedRaw = sanitizeApiPayload(raw);
+  const usage = extractRuntimeTraceUsage(raw);
+  const finishReason = extractRuntimeTraceFinishReason(raw);
+  const toolCalls = connector.chatTransport === "openai-chat-completions" ? extractObservedToolCalls(raw) : [];
+  input.trace.record("response_received", "Received runtime chat response.", {
+    statusCode: response.status,
+    response: summarizeResponsePayload(sanitizedRaw),
+    usage,
+    finishReason,
+    toolCallCount: toolCalls.length
+  });
+  if (toolCalls.length > 0) {
+    input.trace.record("tool_calls_observed", "Observed tool calls in runtime response payload.", {
+      toolCalls,
+      toolCallCount: toolCalls.length
+    });
+  }
   if (!response.ok) {
     throw new RuntimeChatHttpError(
       response.status,
@@ -594,6 +734,10 @@ async function sendHttpRuntimeChatMessage(input: {
   return {
     resolvedBaseUrl: runtimeBaseUrl,
     raw,
+    statusCode: response.status,
+    usage,
+    finishReason,
+    toolCalls,
     assistantText:
       connector.chatTransport === "openai-chat-completions"
         ? normalizeOpenAiChatAssistantText(raw)
@@ -608,6 +752,7 @@ async function sendOpenClawChatMessage(input: {
   message: string;
   requestId?: string;
   token?: string;
+  trace: RuntimeChatTraceRecorder;
 }): Promise<RuntimeChatAdapterResponse> {
   const runtimeBaseUrl = await resolveRuntimeHttpBaseUrl({
     runtimeInstance: input.runtimeInstance,
@@ -625,6 +770,17 @@ async function sendOpenClawChatMessage(input: {
   });
 
   const gatewayUrl = resolveRuntimeGatewayUrl(runtimeBaseUrl);
+  input.trace.record("request_built", "Prepared OpenClaw gateway chat request.", {
+    runtimeType: input.runtimeInstance.runtimeType,
+    transport: "openclaw-gateway",
+    baseUrl: runtimeBaseUrl,
+    gatewayUrl,
+    request: {
+      sessionKey: OPENCLAW_MAIN_SESSION_KEY,
+      messageLength: input.message.length,
+      hasToken: Boolean(input.token)
+    }
+  });
   const socket = await openGatewaySocketWithRetry(
     gatewayUrl,
     input.config.runtimeHttpTimeoutMs,
@@ -637,8 +793,16 @@ async function sendOpenClawChatMessage(input: {
       input.config.runtimeHttpTimeoutMs,
       "OpenClaw gateway did not send connect challenge.",
     );
+    input.trace.record("gateway_event", "OpenClaw gateway challenge received.", {
+      gatewayUrl,
+      event: "connect.challenge"
+    });
 
     const connectRequestId = randomUUID();
+    input.trace.record("request_sent", "Sent OpenClaw gateway connect request.", {
+      gatewayUrl,
+      method: "connect"
+    });
     socket.send({
       type: "req",
       id: connectRequestId,
@@ -670,8 +834,16 @@ async function sendOpenClawChatMessage(input: {
         toRecord(connectResponse.payload) ?? toRecord(connectResponse.error),
       );
     }
+    input.trace.record("gateway_event", "OpenClaw gateway connection acknowledged.", {
+      gatewayUrl,
+      event: "connect.ok"
+    });
 
     const chatRequestId = randomUUID();
+    input.trace.record("request_sent", "Sent OpenClaw chat.send request.", {
+      gatewayUrl,
+      method: "chat.send"
+    });
     socket.send({
       type: "req",
       id: chatRequestId,
@@ -695,6 +867,10 @@ async function sendOpenClawChatMessage(input: {
         toRecord(chatResponse.payload) ?? toRecord(chatResponse.error),
       );
     }
+    input.trace.record("gateway_event", "OpenClaw chat request accepted.", {
+      gatewayUrl,
+      event: "chat.send.accepted"
+    });
 
     const runId = pickString(toRecord(chatResponse.payload)?.runId);
     if (!runId) {
@@ -714,6 +890,17 @@ async function sendOpenClawChatMessage(input: {
     if (!terminalPayload) {
       throw new Error("OpenClaw chat event payload was empty.");
     }
+    const sanitizedTerminalPayload = sanitizeApiPayload(toRecord(terminalEvent.payload));
+    input.trace.record("gateway_event", "OpenClaw terminal chat event received.", {
+      gatewayUrl,
+      event: "chat",
+      state: terminalPayload.state,
+      runId
+    });
+    input.trace.record("response_received", "Received OpenClaw terminal chat payload.", {
+      statusCode: 200,
+      response: summarizeResponsePayload(sanitizedTerminalPayload)
+    });
 
     if (terminalPayload.state === "error") {
       throw new RuntimeChatHttpError(
@@ -730,11 +917,72 @@ async function sendOpenClawChatMessage(input: {
     return {
       resolvedBaseUrl: runtimeBaseUrl,
       raw: toRecord(terminalEvent.payload),
+      statusCode: 200,
       assistantText: extractOpenClawAssistantText(terminalPayload.message),
     };
   } finally {
     socket.close();
   }
+}
+
+function createRuntimeChatTraceRecorder(input: {
+  deps: Pick<
+    RuntimeRouteDeps,
+    "createRuntimeTraceRun" | "updateRuntimeTraceRun" | "appendRuntimeTraceEvent"
+  >;
+  runtimeInstance: RuntimeInstance;
+  requestId?: string;
+  userMessageId?: string;
+  startedAtMs: number;
+}): RuntimeChatTraceRecorder {
+  const transport = getRuntimeConnector(input.runtimeInstance.runtimeType)
+    .chatTransport as RuntimeTraceTransport;
+  const startedAt = new Date(input.startedAtMs).toISOString();
+  const run = input.deps.createRuntimeTraceRun({
+    requestId: input.requestId,
+    tenantId: input.runtimeInstance.tenantId,
+    agentId: input.runtimeInstance.agentId,
+    instanceId: input.runtimeInstance.id,
+    runtimeType: input.runtimeInstance.runtimeType,
+    transport,
+    model: input.runtimeInstance.llmModel,
+    status: "started",
+    startedAt,
+    userMessageId: input.userMessageId,
+    toolCallCount: 0
+  });
+
+  return {
+    runId: run.id,
+    startedAtMs: input.startedAtMs,
+    record(kind, summary, data, createdAt) {
+      input.deps.appendRuntimeTraceEvent({
+        runId: run.id,
+        kind,
+        createdAt,
+        summary,
+        data: data ? sanitizeApiPayload(data) : undefined
+      });
+      input.deps.updateRuntimeTraceRun(run.id, {
+        lastEventKind: kind
+      });
+    },
+    updateRun(patch) {
+      input.deps.updateRuntimeTraceRun(run.id, sanitizeApiPayload(patch));
+    },
+    succeed(patch = {}) {
+      input.deps.updateRuntimeTraceRun(run.id, sanitizeApiPayload({
+        ...patch,
+        status: "succeeded"
+      }));
+    },
+    fail(patch = {}) {
+      input.deps.updateRuntimeTraceRun(run.id, sanitizeApiPayload({
+        ...patch,
+        status: "failed"
+      }));
+    }
+  };
 }
 
 function buildRuntimeChatRequestBody(runtimeInstance: RuntimeInstance, message: string): Record<string, unknown> {
@@ -825,6 +1073,114 @@ function resolveOpenClawResponseMessage(
     pickString(toRecord(response.payload)?.summary) ??
     fallback
   );
+}
+
+function buildAssistantPreview(text: string, maxLength = 180): string {
+  const normalized = text.replace(/\s+/gu, " ").trim();
+  if (normalized.length <= maxLength) {
+    return normalized;
+  }
+  return `${normalized.slice(0, Math.max(0, maxLength - 1))}…`;
+}
+
+function summarizeResponsePayload(
+  payload: Record<string, unknown> | null | undefined
+): Record<string, unknown> | undefined {
+  if (!payload) {
+    return undefined;
+  }
+
+  return sanitizeApiPayload({
+    keys: Object.keys(payload),
+    usage: extractRuntimeTraceUsage(payload),
+    finishReason: extractRuntimeTraceFinishReason(payload),
+    assistantPreview: buildAssistantPreview(
+      extractRuntimeTraceAssistantPreview(payload) ?? JSON.stringify(payload, null, 2)
+    ),
+    toolCallCount: extractObservedToolCalls(payload).length
+  });
+}
+
+function extractRuntimeTraceAssistantPreview(
+  payload: Record<string, unknown> | null
+): string | undefined {
+  if (!payload) {
+    return undefined;
+  }
+  return normalizeOpenAiChatAssistantText(payload) || normalizeRuntimeChatAssistantText(payload);
+}
+
+function extractRuntimeTraceUsage(
+  payload: Record<string, unknown> | null
+): RuntimeChatAdapterResponse["usage"] | undefined {
+  const usage = toRecord(payload?.usage);
+  if (!usage) {
+    return undefined;
+  }
+
+  const inputTokens = pickFiniteNumber(usage.prompt_tokens) ?? pickFiniteNumber(usage.input_tokens);
+  const outputTokens =
+    pickFiniteNumber(usage.completion_tokens) ?? pickFiniteNumber(usage.output_tokens);
+  const totalTokens = pickFiniteNumber(usage.total_tokens) ?? sumFiniteNumbers(inputTokens, outputTokens);
+
+  if (inputTokens === undefined && outputTokens === undefined && totalTokens === undefined) {
+    return undefined;
+  }
+
+  return {
+    ...(inputTokens === undefined ? {} : { inputTokens }),
+    ...(outputTokens === undefined ? {} : { outputTokens }),
+    ...(totalTokens === undefined ? {} : { totalTokens })
+  };
+}
+
+function extractRuntimeTraceFinishReason(payload: Record<string, unknown> | null): string | undefined {
+  const choices = Array.isArray(payload?.choices) ? payload.choices : [];
+  for (const choice of choices) {
+    const finishReason = pickString(toRecord(choice)?.finish_reason);
+    if (finishReason) {
+      return finishReason;
+    }
+  }
+
+  return pickString(payload?.finish_reason);
+}
+
+function extractObservedToolCalls(payload: Record<string, unknown> | null): RuntimeObservedToolCall[] {
+  const choices = Array.isArray(payload?.choices) ? payload.choices : [];
+  const observed: RuntimeObservedToolCall[] = [];
+
+  for (const choice of choices) {
+    const message = toRecord(toRecord(choice)?.message);
+    const toolCalls = Array.isArray(message?.tool_calls) ? message.tool_calls : [];
+    for (const toolCall of toolCalls) {
+      const record = toRecord(toolCall);
+      const functionRecord = toRecord(record?.function);
+      observed.push({
+        id: pickString(record?.id),
+        type: pickString(record?.type),
+        name: pickString(functionRecord?.name),
+        argumentsPreview: buildArgumentsPreview(functionRecord?.arguments)
+      });
+    }
+  }
+
+  return observed;
+}
+
+function buildArgumentsPreview(value: unknown): string | undefined {
+  if (typeof value === "string" && value.trim()) {
+    return buildAssistantPreview(redactSensitiveText(value.trim()), 220);
+  }
+  if (!value) {
+    return undefined;
+  }
+
+  try {
+    return buildAssistantPreview(redactSensitiveText(JSON.stringify(value)), 220);
+  } catch {
+    return undefined;
+  }
 }
 
 function normalizeRuntimeChatAssistantText(payload: Record<string, unknown> | null): string {
@@ -923,12 +1279,40 @@ function pickString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
 }
 
+function pickFiniteNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+}
+
+function sumFiniteNumbers(left?: number, right?: number): number | undefined {
+  if (left === undefined && right === undefined) {
+    return undefined;
+  }
+  return (left ?? 0) + (right ?? 0);
+}
+
 function supportsManagedRuntimeChatToken(runtimeType: RuntimeType): boolean {
   return (
     runtimeType === "openclaw" ||
     runtimeType === "zeroclaw" ||
     runtimeType === "hermes"
   );
+}
+
+function buildTraceRequestBodySummary(body: Record<string, unknown>): Record<string, unknown> {
+  return {
+    model: pickString(body.model),
+    stream: typeof body.stream === "boolean" ? body.stream : undefined,
+    messageCount: Array.isArray(body.messages) ? body.messages.length : undefined,
+    userMessageLength: getChatBodyUserMessageLength(body),
+    hasPlainMessage: typeof body.message === "string",
+    plainMessageLength: pickString(body.message)?.length
+  };
+}
+
+function getChatBodyUserMessageLength(body: Record<string, unknown>): number | undefined {
+  const messages = Array.isArray(body.messages) ? body.messages : [];
+  const userMessage = messages.find((entry) => toRecord(entry)?.role === "user");
+  return pickString(toRecord(userMessage)?.content)?.length;
 }
 
 function buildRuntimeAwareMessage(runtimeInstance: RuntimeInstance, userMessage: string): string {

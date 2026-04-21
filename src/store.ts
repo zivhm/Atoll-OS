@@ -239,6 +239,69 @@ export type RuntimeChatMessage = {
   metadata?: Record<string, unknown>;
 };
 
+export const RUNTIME_TRACE_TRANSPORTS = [
+  "openclaw-gateway",
+  "http-message",
+  "openai-chat-completions"
+] as const;
+export type RuntimeTraceTransport = (typeof RUNTIME_TRACE_TRANSPORTS)[number];
+
+export const RUNTIME_TRACE_RUN_STATUSES = ["started", "succeeded", "failed"] as const;
+export type RuntimeTraceRunStatus = (typeof RUNTIME_TRACE_RUN_STATUSES)[number];
+
+export const RUNTIME_TRACE_EVENT_KINDS = [
+  "run_started",
+  "request_built",
+  "request_sent",
+  "response_received",
+  "assistant_text_extracted",
+  "tool_calls_observed",
+  "gateway_event",
+  "run_succeeded",
+  "run_failed"
+] as const;
+export type RuntimeTraceEventKind = (typeof RUNTIME_TRACE_EVENT_KINDS)[number];
+
+export type RuntimeTraceUsage = {
+  inputTokens?: number;
+  outputTokens?: number;
+  totalTokens?: number;
+};
+
+export type RuntimeTraceRun = {
+  id: string;
+  requestId?: string;
+  tenantId: string;
+  agentId: string;
+  instanceId: string;
+  runtimeType: RuntimeType;
+  transport: RuntimeTraceTransport;
+  model: string;
+  status: RuntimeTraceRunStatus;
+  startedAt: string;
+  finishedAt?: string;
+  durationMs?: number;
+  userMessageId?: string;
+  assistantMessageId?: string;
+  errorMessageId?: string;
+  toolCallCount: number;
+  usage?: RuntimeTraceUsage;
+  finishReason?: string;
+  failureClass?: string;
+  failureMessage?: string;
+  lastEventKind?: RuntimeTraceEventKind;
+};
+
+export type RuntimeTraceEvent = {
+  id: string;
+  runId: string;
+  sequence: number;
+  kind: RuntimeTraceEventKind;
+  createdAt: string;
+  summary: string;
+  data?: Record<string, unknown>;
+};
+
 export type CreateRuntimeInstanceInput = {
   tenantId: string;
   agentId: string;
@@ -302,7 +365,7 @@ type SerializedRuntimeInstance = Omit<
 };
 
 type StoreSnapshot = {
-  version: 1;
+  version: 1 | 2;
   tenants: Tenant[];
   agents: Agent[];
   agentPresets?: AgentPresetCatalogItem[];
@@ -311,6 +374,8 @@ type StoreSnapshot = {
   runtimeProvisionRequests?: RuntimeProvisionRequest[];
   runtimeEvents?: RuntimeEvent[];
   runtimeChatMessages?: RuntimeChatMessage[];
+  runtimeTraceRuns?: RuntimeTraceRun[];
+  runtimeTraceEvents?: RuntimeTraceEvent[];
 };
 
 type StoreOptions = {
@@ -318,6 +383,9 @@ type StoreOptions = {
   secretsKey: string;
   runtimeEventsMaxEntries?: number;
   runtimeEventsMaxAgeDays?: number;
+  runtimeTraceRunsMaxEntries?: number;
+  runtimeTraceEventsMaxEntries?: number;
+  runtimeTraceMaxAgeDays?: number;
 };
 
 type UpdateRuntimePatch = Partial<
@@ -358,13 +426,15 @@ type UpdateRuntimePatch = Partial<
   >
 >;
 
-const STORE_VERSION = 1;
+const STORE_VERSION = 2;
 const ENCRYPTION_PREFIX = "enc:v1";
 const KEY_BYTES = 32;
 const IV_BYTES = 12;
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const DEFAULT_RUNTIME_EVENTS_MAX_ENTRIES = 5000;
 export const DEFAULT_RUNTIME_EVENTS_MAX_AGE_DAYS = 30;
+export const DEFAULT_RUNTIME_TRACE_RUNS_MAX_ENTRIES = 2000;
+export const DEFAULT_RUNTIME_TRACE_EVENTS_MAX_ENTRIES = 20000;
 
 export type Store = ReturnType<typeof createStore>;
 
@@ -388,6 +458,19 @@ export function createStore(options: StoreOptions) {
     DEFAULT_RUNTIME_EVENTS_MAX_AGE_DAYS
   );
   const runtimeEventsMaxAgeMs = runtimeEventsMaxAgeDays > 0 ? runtimeEventsMaxAgeDays * DAY_MS : 0;
+  const runtimeTraceRunsMaxEntries = normalizeNonNegativeInteger(
+    options.runtimeTraceRunsMaxEntries,
+    DEFAULT_RUNTIME_TRACE_RUNS_MAX_ENTRIES
+  );
+  const runtimeTraceEventsMaxEntries = normalizeNonNegativeInteger(
+    options.runtimeTraceEventsMaxEntries,
+    DEFAULT_RUNTIME_TRACE_EVENTS_MAX_ENTRIES
+  );
+  const runtimeTraceMaxAgeDays = normalizeNonNegativeInteger(
+    options.runtimeTraceMaxAgeDays,
+    runtimeEventsMaxAgeDays
+  );
+  const runtimeTraceMaxAgeMs = runtimeTraceMaxAgeDays > 0 ? runtimeTraceMaxAgeDays * DAY_MS : 0;
 
   if (encryptionKey.length !== KEY_BYTES) {
     throw new Error("Invalid encryption key");
@@ -402,6 +485,8 @@ export function createStore(options: StoreOptions) {
   const runtimeProvisionRequests = new Map<string, RuntimeProvisionRequest>();
   const runtimeEvents = new Map<string, RuntimeEvent>();
   const runtimeChatMessages = new Map<string, RuntimeChatMessage>();
+  const runtimeTraceRuns = new Map<string, RuntimeTraceRun>();
+  const runtimeTraceEvents = new Map<string, RuntimeTraceEvent>();
 
   loadState();
 
@@ -439,7 +524,13 @@ export function createStore(options: StoreOptions) {
     listRuntimeEvents,
     appendRuntimeEvent,
     listRuntimeChatMessages,
-    appendRuntimeChatMessage
+    appendRuntimeChatMessage,
+    listRuntimeTraceRuns,
+    getRuntimeTraceRun,
+    createRuntimeTraceRun,
+    updateRuntimeTraceRun,
+    listRuntimeTraceEvents,
+    appendRuntimeTraceEvent
   };
 
   function listTenants(identityOrgId?: string): Tenant[] {
@@ -1031,6 +1122,92 @@ export function createStore(options: StoreOptions) {
     return message;
   }
 
+  function listRuntimeTraceRuns(input: {
+    instanceId?: string;
+    limit?: number;
+  } = {}): RuntimeTraceRun[] {
+    const values = [...runtimeTraceRuns.values()];
+    const filtered = values.filter((run) => {
+      if (input.instanceId && run.instanceId !== input.instanceId) return false;
+      return true;
+    });
+    const sorted = filtered.sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+    const limit = input.limit && input.limit > 0 ? Math.floor(input.limit) : sorted.length;
+    return sorted.slice(0, limit);
+  }
+
+  function getRuntimeTraceRun(traceId: string): RuntimeTraceRun | undefined {
+    return runtimeTraceRuns.get(traceId);
+  }
+
+  function createRuntimeTraceRun(input: Omit<RuntimeTraceRun, "id">): RuntimeTraceRun {
+    const run: RuntimeTraceRun = {
+      id: randomUUID(),
+      ...input
+    };
+
+    runtimeTraceRuns.set(run.id, run);
+    pruneRuntimeTraces();
+    persistState();
+    return run;
+  }
+
+  function updateRuntimeTraceRun(
+    traceId: string,
+    patch: Partial<Omit<RuntimeTraceRun, "id">>
+  ): RuntimeTraceRun | undefined {
+    const current = runtimeTraceRuns.get(traceId);
+    if (!current) {
+      return undefined;
+    }
+
+    const updated: RuntimeTraceRun = {
+      ...current,
+      ...patch
+    };
+
+    runtimeTraceRuns.set(updated.id, updated);
+    pruneRuntimeTraces();
+    persistState();
+    return updated;
+  }
+
+  function listRuntimeTraceEvents(input: { runId: string }): RuntimeTraceEvent[] {
+    return [...runtimeTraceEvents.values()]
+      .filter((event) => event.runId === input.runId)
+      .sort((a, b) => a.sequence - b.sequence || a.createdAt.localeCompare(b.createdAt));
+  }
+
+  function appendRuntimeTraceEvent(input: {
+    runId: string;
+    kind: RuntimeTraceEventKind;
+    createdAt?: string;
+    summary: string;
+    data?: Record<string, unknown>;
+  }): RuntimeTraceEvent {
+    const nextSequence =
+      [...runtimeTraceEvents.values()].reduce((max, event) => {
+        if (event.runId !== input.runId) {
+          return max;
+        }
+        return Math.max(max, event.sequence);
+      }, 0) + 1;
+    const event: RuntimeTraceEvent = {
+      id: randomUUID(),
+      runId: input.runId.trim(),
+      sequence: nextSequence,
+      kind: input.kind,
+      createdAt: input.createdAt?.trim() || new Date().toISOString(),
+      summary: input.summary.trim(),
+      data: input.data
+    };
+
+    runtimeTraceEvents.set(event.id, event);
+    pruneRuntimeTraces();
+    persistState();
+    return event;
+  }
+
   function loadState(): void {
     if (!existsSync(stateFilePath)) {
       seedDefaultAgentPresets();
@@ -1041,7 +1218,7 @@ export function createStore(options: StoreOptions) {
       const raw = readFileSync(stateFilePath, "utf8");
       const parsed = JSON.parse(raw) as StoreSnapshot;
 
-      if (!parsed || parsed.version !== STORE_VERSION) {
+      if (!parsed || (parsed.version !== 1 && parsed.version !== STORE_VERSION)) {
         throw new Error(`Unsupported store version in ${stateFilePath}`);
       }
 
@@ -1079,10 +1256,18 @@ export function createStore(options: StoreOptions) {
       (parsed.runtimeChatMessages ?? []).forEach((message) => {
         runtimeChatMessages.set(message.id, message);
       });
+      (parsed.runtimeTraceRuns ?? []).forEach((run) => {
+        runtimeTraceRuns.set(run.id, run);
+      });
+      (parsed.runtimeTraceEvents ?? []).forEach((event) => {
+        runtimeTraceEvents.set(event.id, event);
+      });
       const prunedOnLoad = pruneRuntimeEvents();
+      const prunedTraceData = pruneRuntimeTraces();
       const prunedOrphanedAgents = pruneOrphanedAgentsWithTerminalProvisionHistory();
       if (
         prunedOnLoad ||
+        prunedTraceData ||
         prunedOrphanedAgents ||
         normalizedTenants.changed ||
         normalizedAgents.changed
@@ -1105,7 +1290,9 @@ export function createStore(options: StoreOptions) {
       provisionJobs: [...provisionJobs.values()],
       runtimeProvisionRequests: [...runtimeProvisionRequests.values()],
       runtimeEvents: [...runtimeEvents.values()],
-      runtimeChatMessages: [...runtimeChatMessages.values()]
+      runtimeChatMessages: [...runtimeChatMessages.values()],
+      runtimeTraceRuns: [...runtimeTraceRuns.values()],
+      runtimeTraceEvents: [...runtimeTraceEvents.values()]
     };
 
     const output = `${JSON.stringify(snapshot, null, 2)}\n`;
@@ -1375,6 +1562,72 @@ export function createStore(options: StoreOptions) {
       for (const id of runtimeEvents.keys()) {
         if (!keepIds.has(id)) {
           runtimeEvents.delete(id);
+          changed = true;
+        }
+      }
+    }
+
+    return changed;
+  }
+
+  function pruneRuntimeTraces(nowMs = Date.now()): boolean {
+    let changed = false;
+
+    if (runtimeTraceMaxAgeMs > 0) {
+      for (const [id, run] of runtimeTraceRuns.entries()) {
+        const startedAtMs = Date.parse(run.startedAt);
+        const isValidDate = Number.isFinite(startedAtMs);
+        const isExpired = isValidDate ? nowMs - startedAtMs >= runtimeTraceMaxAgeMs : true;
+        if (isExpired) {
+          runtimeTraceRuns.delete(id);
+          changed = true;
+        }
+      }
+    }
+
+    if (runtimeTraceRunsMaxEntries > 0 && runtimeTraceRuns.size > runtimeTraceRunsMaxEntries) {
+      const keepIds = new Set(
+        [...runtimeTraceRuns.values()]
+          .sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+          .slice(0, runtimeTraceRunsMaxEntries)
+          .map((run) => run.id)
+      );
+
+      for (const id of runtimeTraceRuns.keys()) {
+        if (!keepIds.has(id)) {
+          runtimeTraceRuns.delete(id);
+          changed = true;
+        }
+      }
+    }
+
+    const activeRunIds = new Set(runtimeTraceRuns.keys());
+    for (const [id, event] of runtimeTraceEvents.entries()) {
+      if (!activeRunIds.has(event.runId)) {
+        runtimeTraceEvents.delete(id);
+        changed = true;
+      }
+    }
+
+    if (runtimeTraceEventsMaxEntries > 0 && runtimeTraceEvents.size > runtimeTraceEventsMaxEntries) {
+      const keepIds = new Set(
+        [...runtimeTraceEvents.values()]
+          .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+          .slice(0, runtimeTraceEventsMaxEntries)
+          .map((event) => event.id)
+      );
+
+      for (const id of runtimeTraceEvents.keys()) {
+        if (!keepIds.has(id)) {
+          runtimeTraceEvents.delete(id);
+          changed = true;
+        }
+      }
+
+      const survivingRunIds = new Set([...runtimeTraceEvents.values()].map((event) => event.runId));
+      for (const [id, run] of runtimeTraceRuns.entries()) {
+        if (!survivingRunIds.has(id)) {
+          runtimeTraceRuns.delete(id);
           changed = true;
         }
       }

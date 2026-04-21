@@ -25,6 +25,7 @@ import { toast } from "sonner";
 
 import { AgentAvatarField } from "@/components/AgentAvatarField";
 import { AgentSkillsSettingsPanel } from "@/components/AgentSkillsSettingsPanel";
+import { RuntimeTracePanel } from "@/components/RuntimeTracePanel";
 import { RuntimeConfigFields } from "@/components/RuntimeConfigFields";
 import {
   DiscordIntegrationCard,
@@ -54,6 +55,7 @@ import {
   downloadRuntimeSharedFile,
   checkRuntimeSlackOnboarding,
   exportRuntimeEvents,
+  exportRuntimeTrace,
   getAgentSkillsCatalog,
   getErrorMessage,
   getRuntimeChatErrorMessage,
@@ -63,11 +65,13 @@ import {
   getRuntimeDiagnostics,
   getRuntimeHealth,
   getRuntimePairingInfo,
+  getRuntimeTrace,
   getRuntimeSlackOnboarding,
   listAgents,
   listRuntimeCatalog,
   listRuntimeChatMessages,
   listRuntimeEvents,
+  listRuntimeTraces,
   listRuntimeSharedFiles,
   listRuntimeInstances,
   listTenants,
@@ -168,6 +172,7 @@ export default function AgentSettings() {
   const [webhookMessage, setWebhookMessage] = useState("Ping from Atoll");
   const [runtimeConfigValues, setRuntimeConfigValues] = useState<RuntimeConfigFormState>({});
   const [diagnosticsOutput, setDiagnosticsOutput] = useState("");
+  const [selectedTraceId, setSelectedTraceId] = useState("");
   const [chatDraft, setChatDraft] = useState("");
   const [chatError, setChatError] = useState("");
   const [slackOnboardingCheckResult, setSlackOnboardingCheckResult] = useState<
@@ -229,6 +234,17 @@ export default function AgentSettings() {
     enabled: Boolean(instanceId && isRuntimeTabActive),
     refetchInterval: isRuntimeTabActive ? RUNTIME_REFRESH_INTERVAL_MS : false,
   });
+  const traceRunsQuery = useQuery({
+    queryKey: ["runtime-traces", instanceId],
+    queryFn: () => listRuntimeTraces(instanceId!, 25),
+    enabled: Boolean(instanceId && isRuntimeTabActive),
+    refetchInterval: isRuntimeTabActive ? RUNTIME_REFRESH_INTERVAL_MS : false,
+  });
+  const traceDetailQuery = useQuery({
+    queryKey: ["runtime-trace-detail", instanceId, selectedTraceId],
+    queryFn: () => getRuntimeTrace(instanceId!, selectedTraceId),
+    enabled: Boolean(instanceId && selectedTraceId && isRuntimeTabActive),
+  });
   const pairingInfoQuery = useQuery({
     queryKey: ["pairing-info", instanceId],
     queryFn: () => getRuntimePairingInfo(instanceId!),
@@ -284,6 +300,7 @@ export default function AgentSettings() {
     setSlackOnboardingCheckResult(undefined);
     setChatDraft("");
     setChatError("");
+    setSelectedTraceId("");
   }, [detail.instance, selectedRuntime]);
 
   useEffect(() => {
@@ -291,6 +308,19 @@ export default function AgentSettings() {
       setDiagnosticsOutput(JSON.stringify(diagnosticsQuery.data, null, 2));
     }
   }, [diagnosticsQuery.data]);
+
+  useEffect(() => {
+    const traces = traceRunsQuery.data ?? [];
+    if (traces.length === 0) {
+      if (selectedTraceId) {
+        setSelectedTraceId("");
+      }
+      return;
+    }
+    if (!traces.some((trace) => trace.id === selectedTraceId)) {
+      setSelectedTraceId(traces[0]?.id ?? "");
+    }
+  }, [selectedTraceId, traceRunsQuery.data]);
 
   const chatMessages = chatQuery.data ?? EMPTY_CHAT_MESSAGES;
   const onboardingStage = getOnboardingStage({
@@ -612,6 +642,19 @@ export default function AgentSettings() {
       toast.error(getErrorMessage(error, "Could not export activity"));
     },
   });
+  const exportTraceMutation = useMutation({
+    mutationFn: async (traceId: string) => {
+      if (!detail.instance) throw new Error("No runtime instance found");
+      return exportRuntimeTrace(detail.instance.id, traceId);
+    },
+    onSuccess: (payload) => {
+      setDiagnosticsOutput(JSON.stringify(payload, null, 2));
+      toast.success("Trace export ready");
+    },
+    onError: (error) => {
+      toast.error(getErrorMessage(error, "Could not export trace"));
+    },
+  });
   const chatMutation = useMutation({
     mutationFn: async (message: string) => {
       if (!detail.instance) throw new Error("No runtime instance found");
@@ -629,7 +672,10 @@ export default function AgentSettings() {
       );
       setChatDraft("");
       setChatError("");
-      await queryClient.invalidateQueries({ queryKey: ["runtime-chat", detail.instance.id] });
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ["runtime-chat", detail.instance.id] }),
+        queryClient.invalidateQueries({ queryKey: ["runtime-traces", detail.instance.id] }),
+      ]);
     },
     onError: (error) => {
       setChatError(getRuntimeChatErrorMessage(error, "Could not send message"));
@@ -957,6 +1003,22 @@ export default function AgentSettings() {
                 {diagnosticsOutput || "Health details will appear here."}
               </pre>
             </div>
+          </RuntimeMiniCard>
+
+          <RuntimeMiniCard
+            title="Trace inspector"
+            description="Per-chat execution traces captured at the runtime transport boundary."
+          >
+            <RuntimeTracePanel
+              runs={traceRunsQuery.data ?? []}
+              selectedTraceId={selectedTraceId}
+              selectedTrace={traceDetailQuery.data}
+              listLoading={traceRunsQuery.isLoading}
+              detailLoading={traceDetailQuery.isLoading}
+              exportPending={exportTraceMutation.isPending}
+              onSelectTrace={setSelectedTraceId}
+              onExportTrace={(traceId) => void exportTraceMutation.mutateAsync(traceId)}
+            />
           </RuntimeMiniCard>
 
           <RuntimeMiniCard
