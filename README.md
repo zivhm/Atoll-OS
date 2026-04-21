@@ -257,15 +257,7 @@ atoll-state.json          Local persisted state file
 | --- | --- | --- | --- |
 | OpenClaw | Supported | Native OpenClaw gateway websocket | Shared Telegram, Slack, Discord controls |
 | ZeroClaw | Supported | HTTP webhook/message bridge | Shared Telegram controls, pairing/webhook flows |
-| Hermes | Beta | OpenAI-compatible API server (`/v1/chat/completions`) | Shared Telegram/Slack overlap plus Hermes-native advanced runtime config |
-
-### Hermes Notes
-
-- Hermes containers are managed directly by Atoll through the same runtime connector flow as other runtimes.
-- Hermes uses its native `/opt/data` layout with `config.yaml` and `.env`, not the OpenClaw filesystem contract.
-- Hermes-specific messaging controls that do not map cleanly to the shared UI are exposed through advanced runtime config instead of the generic integration cards.
-- Remaining Hermes risk is live provider QA with real Telegram, Slack, and Discord credentials. Local Docker provisioning, health, auth, model discovery, chat, and config seeding are verified.
-
+| Hermes | Supported | OpenAI-compatible API server (`/v1/chat/completions`) | Shared Telegram/Slack overlap plus Hermes-native advanced runtime config |
 ---
 
 ## 🌐 Landing Page
