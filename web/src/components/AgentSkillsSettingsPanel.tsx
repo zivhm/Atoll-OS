@@ -688,7 +688,7 @@ function areInstalledSkillsEqual(left: AgentInstalledSkill[], right: AgentInstal
 
 function buildExploreSources(catalogItems: AgentSkillCatalogItem[]): ExploreSource[] {
   const byHost = new Map<string, ExploreSource>();
-  const defaultHosts = [SKILLS_SH_HOST, AGENTSKILLS_HOST];
+  const defaultHosts = [SKILLS_SH_HOST, AGENTSKILLS_HOST, CLAWHUB_HOST];
 
   for (const host of defaultHosts) {
     byHost.set(host, createExploreSourceFromHost(host));
@@ -723,6 +723,7 @@ function buildPaginationWindow(currentPage: number, pageCount: number): Array<nu
 
 const SKILLS_SH_HOST = "skills.sh";
 const AGENTSKILLS_HOST = "agentskills.co.il";
+const CLAWHUB_HOST = "clawhub.ai";
 
 function isBrowsableSourceHost(host: string): boolean {
   if (!host || host === "local" || host === "remote") {
@@ -746,6 +747,14 @@ function createExploreSourceFromHost(host: string): ExploreSource {
       label: AGENTSKILLS_HOST,
       description: "Skills IL directory.",
       url: "https://agentskills.co.il/en/skills"
+    };
+  }
+  if (host === CLAWHUB_HOST) {
+    return {
+      id: "clawhub-ai",
+      label: CLAWHUB_HOST,
+      description: "ClawHub skills directory.",
+      url: "https://clawhub.ai/skills"
     };
   }
 

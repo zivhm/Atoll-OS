@@ -91,6 +91,7 @@ describe("AgentSkillsSettingsPanel", () => {
     expect(screen.getByTestId("catalog-view-gallery")).toBeInTheDocument();
     expect(screen.getByTestId("explore-source-skills-sh")).toBeInTheDocument();
     expect(screen.getByTestId("explore-source-agentskills-co-il")).toBeInTheDocument();
+    expect(screen.getByTestId("explore-source-clawhub-ai")).toBeInTheDocument();
   });
 
   it("toggles browse between list and gallery views", () => {

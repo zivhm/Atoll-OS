@@ -3,6 +3,7 @@ import type { AgentPresetCatalogItem } from "./agent-presets.js";
 
 const SKILLS_SH_HOSTNAME = "skills.sh";
 const AGENTSKILLS_HOSTNAME = "agentskills.co.il";
+const CLAWHUB_HOSTNAME = "clawhub.ai";
 const GITHUB_HOSTNAME = "github.com";
 const RAW_GITHUB_HOSTNAME = "raw.githubusercontent.com";
 const LOCAL_SKILL_SOURCE_HOST = "local";
@@ -14,6 +15,9 @@ const AGENTSKILLS_DISCOVERY_URL = "https://agentskills.co.il/en/skills";
 const AGENTSKILLS_DISCOVERY_TTL_MS = 30 * 60 * 1000;
 const AGENTSKILLS_DISCOVERY_TIMEOUT_MS = 3000;
 const AGENTSKILLS_DISCOVERY_MAX_PER_CATEGORY = 16;
+const CLAWHUB_DISCOVERY_SEARCH_URL = "https://clawhub.ai/api/v1/search";
+const CLAWHUB_DISCOVERY_MAX_PER_QUERY = 8;
+const CLAWHUB_DISCOVERY_MAX_TOTAL = 24;
 
 export const AGENT_INSTALLED_SKILL_SOURCE_KINDS = [
   "manual",
@@ -142,8 +146,25 @@ const DEFAULT_AGENTSKILLS_CATEGORIES = [
   "tax-and-finance"
 ];
 
+const PRESET_CATEGORY_TO_CLAWHUB_QUERIES: Record<string, string[]> = {
+  finance: ["finance automation", "bookkeeping", "spreadsheets"],
+  sales: ["sales outreach", "crm", "lead generation"],
+  support: ["customer support", "helpdesk", "ticket triage"],
+  marketing: ["marketing strategy", "social media", "content marketing"],
+  operations: ["workflow automation", "project management", "admin operations"],
+  "project-management": ["project management", "task planning", "workflow automation"],
+  strategy: ["market research", "pricing strategy", "launch strategy"],
+  engineering: ["developer tools", "api integration", "testing automation"]
+};
+
+const DEFAULT_CLAWHUB_DISCOVERY_QUERIES = [
+  "workflow automation",
+  "project management",
+  "developer tools"
+];
+
 export function isTrustedSkillRef(ref: string): boolean {
-  return isSkillsShRef(ref) || isAgentSkillsRef(ref);
+  return isSkillsShRef(ref) || isAgentSkillsRef(ref) || isClawHubRef(ref);
 }
 
 export function isSkillsShRef(ref: string): boolean {
@@ -174,12 +195,32 @@ export function isAgentSkillsRef(ref: string): boolean {
   }
 }
 
+export function isClawHubRef(ref: string): boolean {
+  const normalized = ref.trim();
+  if (!normalized) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(normalized);
+    return parsed.protocol === "https:" && parsed.hostname === CLAWHUB_HOSTNAME;
+  } catch {
+    return false;
+  }
+}
+
 export type SkillInstallSource =
   | {
       kind: "github";
       key: string;
       source: string;
       packageRef: string;
+    }
+  | {
+      kind: "clawhub";
+      key: string;
+      slug: string;
+      ref: string;
     }
   | {
       kind: "local-path";
@@ -213,7 +254,7 @@ export function deriveSkillKey(value: string, explicitKey?: string): string {
 
   const parsedUrl = tryParseUrl(normalized);
   if (parsedUrl) {
-    if (isSkillsShRef(normalized) || isAgentSkillsRef(normalized)) {
+    if (isSkillsShRef(normalized) || isAgentSkillsRef(normalized) || isClawHubRef(normalized)) {
       return deriveSkillKeyFromUrlPath(parsedUrl);
     }
 
@@ -549,24 +590,25 @@ export async function discoverExternalSkillPresets(
 
   const stale = cached?.value;
   try {
-    const response = await fetchImpl(AGENTSKILLS_DISCOVERY_URL, {
-      method: "GET",
-      headers: {
-        Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1"
-      },
-      signal: AbortSignal.timeout(timeoutMs)
-    });
-    if (!response.ok) {
-      return stale ? stale.map(clonePresetCatalogItem) : [];
-    }
+    const clawHubQueries = resolveClawHubDiscoveryQueries(input.currentPresetCategory);
+    const [agentSkillsPresets, clawHubPresets] = await Promise.all([
+      discoverAgentSkillsPresets({
+        fetchImpl,
+        timeoutMs,
+        targetCategories,
+        currentPresetId,
+        nowMs
+      }),
+      discoverClawHubPresets({
+        fetchImpl,
+        timeoutMs,
+        queries: clawHubQueries,
+        currentPresetId,
+        nowMs
+      })
+    ]);
+    const discovered = [...agentSkillsPresets, ...clawHubPresets];
 
-    const html = await response.text();
-    const discovered = buildExternalSkillPresetsFromAgentSkillsHtml({
-      html,
-      targetCategories,
-      currentPresetId,
-      nowMs
-    });
     if (discovered.length > 0) {
       EXTERNAL_SKILL_PRESETS_CACHE.set(cacheKey, {
         value: discovered.map(clonePresetCatalogItem),
@@ -626,6 +668,19 @@ export function resolveSkillInstallSource(input: {
         key,
         source,
         packageRef: `https://github.com/${source}`
+      };
+    }
+
+    if (isClawHubRef(ref)) {
+      const slug = resolveClawHubSlugFromUrl(parsedUrl);
+      if (!slug) {
+        return undefined;
+      }
+      return {
+        kind: "clawhub",
+        key,
+        slug,
+        ref: `https://${CLAWHUB_HOSTNAME}/skills/${slug}`
       };
     }
 
@@ -721,10 +776,30 @@ function resolveAgentSkillsGithubSourceFromUrl(url: URL): string | undefined {
   return `skills-il/${category}`;
 }
 
+function resolveClawHubSlugFromUrl(url: URL): string | undefined {
+  const segments = getUrlPathSegments(url);
+  if (segments[0] !== "skills" || segments.length !== 2) {
+    return undefined;
+  }
+
+  const slug = segments[1]?.trim().toLowerCase() ?? "";
+  if (!slug) {
+    return undefined;
+  }
+
+  return slug;
+}
+
 function resolveAgentSkillsDiscoveryCategories(category: string | undefined): string[] {
   const normalized = category?.trim().toLowerCase() ?? "";
   const candidates = PRESET_CATEGORY_TO_AGENTSKILLS_CATEGORIES[normalized] ?? DEFAULT_AGENTSKILLS_CATEGORIES;
   return [...new Set(candidates.map((item) => item.trim().toLowerCase()).filter(Boolean))];
+}
+
+function resolveClawHubDiscoveryQueries(category: string | undefined): string[] {
+  const normalized = category?.trim().toLowerCase() ?? "";
+  const candidates = PRESET_CATEGORY_TO_CLAWHUB_QUERIES[normalized] ?? DEFAULT_CLAWHUB_DISCOVERY_QUERIES;
+  return [...new Set(candidates.map((item) => item.trim()).filter(Boolean))];
 }
 
 function isLikelyLocalSkillPath(value: string): boolean {
@@ -869,6 +944,197 @@ function buildExternalSkillPresetsFromAgentSkillsHtml(input: {
   }
 
   return externalPresets;
+}
+
+async function discoverAgentSkillsPresets(input: {
+  fetchImpl: typeof fetch;
+  timeoutMs: number;
+  targetCategories: string[];
+  currentPresetId: string;
+  nowMs: number;
+}): Promise<AgentPresetCatalogItem[]> {
+  try {
+    const response = await input.fetchImpl(AGENTSKILLS_DISCOVERY_URL, {
+      method: "GET",
+      headers: {
+        Accept: "text/html,application/xhtml+xml;q=0.9,*/*;q=0.1"
+      },
+      signal: AbortSignal.timeout(input.timeoutMs)
+    });
+    if (!response.ok) {
+      return [];
+    }
+
+    const html = await response.text();
+    return buildExternalSkillPresetsFromAgentSkillsHtml({
+      html,
+      targetCategories: input.targetCategories,
+      currentPresetId: input.currentPresetId,
+      nowMs: input.nowMs
+    });
+  } catch {
+    return [];
+  }
+}
+
+type ClawHubSearchResult = {
+  slug: string;
+  displayName: string;
+  summary: string;
+};
+
+async function discoverClawHubPresets(input: {
+  fetchImpl: typeof fetch;
+  timeoutMs: number;
+  queries: string[];
+  currentPresetId: string;
+  nowMs: number;
+}): Promise<AgentPresetCatalogItem[]> {
+  const queryResults = new Map<string, ClawHubSearchResult[]>();
+
+  await runWithConcurrency(input.queries, 3, async (query) => {
+    const results = await fetchClawHubSearchResults({
+      fetchImpl: input.fetchImpl,
+      timeoutMs: input.timeoutMs,
+      query
+    });
+    if (results.length > 0) {
+      queryResults.set(query, results);
+    }
+  });
+
+  return buildExternalSkillPresetsFromClawHubResults({
+    queryResults,
+    currentPresetId: input.currentPresetId,
+    nowMs: input.nowMs
+  });
+}
+
+async function fetchClawHubSearchResults(input: {
+  fetchImpl: typeof fetch;
+  timeoutMs: number;
+  query: string;
+}): Promise<ClawHubSearchResult[]> {
+  const targetUrl = new URL(CLAWHUB_DISCOVERY_SEARCH_URL);
+  targetUrl.searchParams.set("q", input.query);
+
+  const response = await input.fetchImpl(targetUrl.toString(), {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    },
+    signal: AbortSignal.timeout(input.timeoutMs)
+  });
+  if (!response.ok) {
+    return [];
+  }
+
+  const payload = (await response.json()) as { results?: unknown[] };
+  if (!Array.isArray(payload.results)) {
+    return [];
+  }
+
+  const normalized: ClawHubSearchResult[] = [];
+  const seen = new Set<string>();
+  for (const item of payload.results) {
+    if (!item || typeof item !== "object") {
+      continue;
+    }
+
+    const record = item as Record<string, unknown>;
+    const slug =
+      typeof record.slug === "string"
+        ? record.slug.trim().toLowerCase()
+        : "";
+    if (!slug || seen.has(slug)) {
+      continue;
+    }
+
+    seen.add(slug);
+    normalized.push({
+      slug,
+      displayName:
+        normalizeSkillLabel(
+          typeof record.displayName === "string" ? record.displayName : undefined
+        ) ?? formatSkillLabel(slug),
+      summary:
+        normalizeSkillSummary(
+          typeof record.summary === "string" ? record.summary : undefined
+        ) || "Discovered from ClawHub."
+    });
+    if (normalized.length >= CLAWHUB_DISCOVERY_MAX_PER_QUERY) {
+      break;
+    }
+  }
+
+  return normalized;
+}
+
+function buildExternalSkillPresetsFromClawHubResults(input: {
+  queryResults: Map<string, ClawHubSearchResult[]>;
+  currentPresetId: string;
+  nowMs: number;
+}): AgentPresetCatalogItem[] {
+  const currentPresetPrefix = input.currentPresetId ? `${input.currentPresetId}:related:` : "related:";
+  const timestamp = new Date(input.nowMs).toISOString();
+  const merged = new Map<string, ClawHubSearchResult>();
+
+  for (const results of input.queryResults.values()) {
+    for (const item of results) {
+      if (merged.has(item.slug)) {
+        continue;
+      }
+      merged.set(item.slug, item);
+      if (merged.size >= CLAWHUB_DISCOVERY_MAX_TOTAL) {
+        break;
+      }
+    }
+    if (merged.size >= CLAWHUB_DISCOVERY_MAX_TOTAL) {
+      break;
+    }
+  }
+
+  if (merged.size === 0) {
+    return [];
+  }
+
+  const recommendedSkills = [...merged.values()].map(
+    (item) => `https://${CLAWHUB_HOSTNAME}/skills/${item.slug}`
+  );
+  const summaryBySlug = new Map([...merged.values()].map((item) => [item.slug, item.summary] as const));
+  const toolsLines = [
+    "# TOOLS.md - Recommended Skills",
+    "",
+    "Use these optional role-related skills discovered from ClawHub.",
+    "",
+    ...recommendedSkills.map((ref) => {
+      const key = deriveSkillKey(ref);
+      const summary = summaryBySlug.get(key) ?? "Discovered from ClawHub.";
+      return `- [${key}](${ref}): ${summary}`;
+    })
+  ];
+
+  return [
+    {
+      id: `${currentPresetPrefix}clawhub:skills`,
+      name: "ClawHub · Role Picks",
+      description: "Role-related skills discovered dynamically from ClawHub.",
+      color: "neutral",
+      category: "external-clawhub",
+      sourceRepoUrl: `https://${CLAWHUB_HOSTNAME}`,
+      sourcePath: "/skills",
+      summary: "Discovered role-related skills for this helper from ClawHub.",
+      suggestedRoleTitle: "",
+      recommendedSkills,
+      identity: "",
+      soul: "",
+      tools: toolsLines.join("\n"),
+      active: true,
+      position: 20_000,
+      createdAt: timestamp,
+      updatedAt: timestamp
+    }
+  ];
 }
 
 async function resolveRemoteSkillMetadata(input: {
@@ -1181,6 +1447,9 @@ function deriveSkillProvider(ref: string, key: string): string {
   const source = resolveSkillInstallSource({ ref, key });
   if (source?.kind === "github") {
     return source.source;
+  }
+  if (source?.kind === "clawhub") {
+    return CLAWHUB_HOSTNAME;
   }
   if (source?.kind === "local-path") {
     return LOCAL_SKILL_SOURCE_HOST;

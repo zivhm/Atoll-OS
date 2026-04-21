@@ -37,6 +37,7 @@ export const SHARED_WORKSPACE_MOUNT_PATH = "/atoll-shared-workspace";
 export const RUNTIME_SHARED_FILES_DIRNAME = "shared-files";
 const RUNTIME_MANAGED_SKILLS_DIR = ".agents/skills";
 const RUNTIME_VISIBLE_SKILLS_DIR = "skills";
+const CLAWHUB_API_BASE_URL = "https://clawhub.ai/api/v1";
 const runtimeVolumeIo = createRuntimeVolumeIo(runDockerBuffer);
 
 export type RuntimeLlmConfig = {
@@ -1635,6 +1636,15 @@ async function buildLocalManagedSkillWorkspace(installedSkills: AgentInstalledSk
       continue;
     }
 
+    if (source.kind === "clawhub") {
+      await materializeClawHubSkill({
+        slug: source.slug,
+        destination,
+        key: source.key
+      });
+      continue;
+    }
+
     await materializeRemoteSkillMarkdown({
       url: source.url,
       destination,
@@ -1887,6 +1897,94 @@ async function materializeRemoteSkillMarkdown(input: {
   await writeFile(join(input.destination, "SKILL.md"), await response.text(), "utf8");
 }
 
+async function materializeClawHubSkill(input: {
+  slug: string;
+  destination: string;
+  key: string;
+}): Promise<void> {
+  const detailUrl = `${CLAWHUB_API_BASE_URL}/skills/${encodeURIComponent(input.slug)}`;
+  const detailResponse = await fetch(detailUrl, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+  if (!detailResponse.ok) {
+    throw new Error(
+      `Failed to load ClawHub skill metadata for ${input.key} (${input.slug}): ${detailResponse.status}`
+    );
+  }
+
+  const detailPayload = (await detailResponse.json()) as {
+    latestVersion?: {
+      version?: unknown;
+    };
+  };
+  const version =
+    typeof detailPayload.latestVersion?.version === "string"
+      ? detailPayload.latestVersion.version.trim()
+      : "";
+  if (!version) {
+    throw new Error(`ClawHub skill ${input.key} (${input.slug}) is missing a latest version`);
+  }
+
+  const versionUrl = `${CLAWHUB_API_BASE_URL}/skills/${encodeURIComponent(input.slug)}/versions/${encodeURIComponent(version)}`;
+  const versionResponse = await fetch(versionUrl, {
+    method: "GET",
+    headers: {
+      Accept: "application/json"
+    }
+  });
+  if (!versionResponse.ok) {
+    throw new Error(
+      `Failed to load ClawHub skill files for ${input.key} (${input.slug}@${version}): ${versionResponse.status}`
+    );
+  }
+
+  const versionPayload = (await versionResponse.json()) as {
+    version?: {
+      files?: Array<{
+        path?: unknown;
+      }>;
+    };
+  };
+  const files = Array.isArray(versionPayload.version?.files) ? versionPayload.version.files : [];
+  if (files.length === 0) {
+    throw new Error(
+      `ClawHub skill ${input.key} (${input.slug}@${version}) returned no files`
+    );
+  }
+
+  for (const file of files) {
+    const rawPath = typeof file.path === "string" ? file.path.trim() : "";
+    const relativePath = normalizeSkillFileRelativePath(rawPath);
+    if (!relativePath) {
+      continue;
+    }
+
+    const fileUrl = new URL(`${CLAWHUB_API_BASE_URL}/skills/${encodeURIComponent(input.slug)}/file`);
+    fileUrl.searchParams.set("path", relativePath);
+    fileUrl.searchParams.set("version", version);
+    const fileResponse = await fetch(fileUrl.toString(), {
+      method: "GET",
+      headers: {
+        Accept: "*/*"
+      }
+    });
+    if (!fileResponse.ok) {
+      throw new Error(
+        `Failed to download ClawHub file '${relativePath}' for ${input.key} (${input.slug}@${version}): ${fileResponse.status}`
+      );
+    }
+
+    const outputPath = join(input.destination, ...relativePath.split("/"));
+    await ensureLocalDirectory(dirname(outputPath));
+    await writeFile(outputPath, Buffer.from(await fileResponse.arrayBuffer()));
+  }
+
+  await assertSkillDirectoryHasSkillMarkdown(input.destination);
+}
+
 async function materializeSkillsCatalogDownload(input: {
   download: {
     source: string;
@@ -1940,6 +2038,21 @@ async function ensureLocalDirectory(directoryPath: string): Promise<void> {
   await mkdir(directoryPath, {
     recursive: true
   });
+}
+
+function normalizeSkillFileRelativePath(value: string): string | undefined {
+  const normalized = value.replace(/\\/gu, "/");
+  const parts = normalized
+    .split("/")
+    .map((part) => part.trim())
+    .filter(Boolean);
+  if (parts.length === 0) {
+    return undefined;
+  }
+  if (parts.some((part) => part === "." || part === "..")) {
+    return undefined;
+  }
+  return parts.join("/");
 }
 
 async function listLocalFiles(rootPath: string): Promise<Array<{ absolutePath: string; relativePath: string }>> {

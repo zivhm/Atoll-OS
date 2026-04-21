@@ -178,6 +178,26 @@ test("parseCreateAgentInput accepts Skills IL skill page installs", () => {
   assert.equal(parsed.installedSkills?.[0]?.key, "hebrew-document-generator");
 });
 
+test("parseCreateAgentInput accepts ClawHub skill page installs", () => {
+  const parsed = parseCreateAgentInput({
+    tenantId: "tenant-1",
+    name: "Nora",
+    channel: "custom",
+    installedSkills: [
+      createInstalledSkill({
+        key: "marketing-strategy-pmm",
+        ref: "https://clawhub.ai/skills/marketing-strategy-pmm",
+        label: "Marketing Strategy PMM"
+      })
+    ],
+    skills: ["marketing-strategy-pmm"]
+  });
+
+  assert.deepEqual(parsed.skills, ["marketing-strategy-pmm"]);
+  assert.equal(parsed.installedSkills?.[0]?.ref, "https://clawhub.ai/skills/marketing-strategy-pmm");
+  assert.equal(parsed.installedSkills?.[0]?.key, "marketing-strategy-pmm");
+});
+
 test("resolveSkillInstallSource maps Skills IL pages to the category GitHub repo", () => {
   const source = resolveSkillInstallSource({
     ref: "https://agentskills.co.il/en/skills/localization/hebrew-document-generator"
@@ -188,6 +208,19 @@ test("resolveSkillInstallSource maps Skills IL pages to the category GitHub repo
     key: "hebrew-document-generator",
     source: "skills-il/localization",
     packageRef: "https://github.com/skills-il/localization"
+  });
+});
+
+test("resolveSkillInstallSource maps ClawHub pages to a ClawHub source descriptor", () => {
+  const source = resolveSkillInstallSource({
+    ref: "https://clawhub.ai/skills/marketing-strategy-pmm"
+  });
+
+  assert.deepEqual(source, {
+    kind: "clawhub",
+    key: "marketing-strategy-pmm",
+    slug: "marketing-strategy-pmm",
+    ref: "https://clawhub.ai/skills/marketing-strategy-pmm"
   });
 });
 
@@ -316,13 +349,48 @@ test("discoverExternalSkillPresets returns role-related Skills IL presets", asyn
     "</body></html>"
   ].join("");
 
-  const fetchMock: typeof fetch = async () =>
-    new Response(html, {
-      status: 200,
-      headers: {
-        "content-type": "text/html; charset=utf-8"
-      }
+  const fetchMock: typeof fetch = async (input) => {
+    const url = typeof input === "string" ? input : input.toString();
+    if (url.startsWith("https://agentskills.co.il/en/skills")) {
+      return new Response(html, {
+        status: 200,
+        headers: {
+          "content-type": "text/html; charset=utf-8"
+        }
+      });
+    }
+
+    if (url.startsWith("https://clawhub.ai/api/v1/search")) {
+      const parsedUrl = new URL(url);
+      const query = parsedUrl.searchParams.get("q") ?? "";
+      const results =
+        query === "project management"
+          ? [
+              {
+                slug: "project-management-pro",
+                displayName: "Project Management Pro",
+                summary: "Project planning and milestone tracking."
+              },
+              {
+                slug: "task-planner-lite",
+                displayName: "Task Planner Lite",
+                summary: "Task decomposition and ownership workflows."
+              }
+            ]
+          : [];
+
+      return new Response(JSON.stringify({ results }), {
+        status: 200,
+        headers: {
+          "content-type": "application/json; charset=utf-8"
+        }
+      });
+    }
+
+    return new Response("not found", {
+      status: 404
     });
+  };
 
   const presets = await discoverExternalSkillPresets({
     currentPresetId: "project-manager",
@@ -339,6 +407,11 @@ test("discoverExternalSkillPresets returns role-related Skills IL presets", asyn
     developerTools?.recommendedSkills.includes(
       "https://agentskills.co.il/en/skills/developer-tools/skills-il-skill-creator"
     )
+  );
+  const clawHub = presets.find((preset) => preset.id.includes("clawhub:skills"));
+  assert.ok(clawHub);
+  assert.ok(
+    clawHub?.recommendedSkills.includes("https://clawhub.ai/skills/project-management-pro")
   );
   assert.equal(
     presets.some((preset) => preset.recommendedSkills.some((ref) => ref.includes("tax-and-finance"))),
