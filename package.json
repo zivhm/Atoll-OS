@@ -21,11 +21,11 @@
     "typecheck:api": "tsc --noEmit -p tsconfig.json",
     "typecheck:web": "tsc -b web/tsconfig.json",
     "typecheck:landing": "tsc -b landing/tsconfig.json",
-    "typecheck": "npm run typecheck:api && npm run typecheck:web",
+    "typecheck": "npm run typecheck:api && npm run typecheck:web && npm run typecheck:landing",
     "test:api": "node --test --import tsx tests/**/*.test.ts",
     "test:web": "vitest run --config web/vitest.config.ts",
     "test:landing": "vitest run --config landing/vitest.config.ts",
-    "test": "npm run test:api && npm run test:web",
+    "test": "npm run test:api && npm run test:web && npm run test:landing",
     "web:preview": "vite preview --config web/vite.config.ts",
     "landing:preview": "vite preview --config landing/vite.config.ts"
   },

@@ -34,11 +34,12 @@ The underlying runtime is unchanged. We just give it a purpose before you ever o
 **Atoll focuses on the operating layer around the agent.**
 
 - 🤖 Create helpers with reusable identities, role definitions, and skill/tool context
+- 🧩 Discover and install helper skills from Skills.sh, Agent Skills, ClawHub, GitHub, or local paths
 - 📁 Share files directly with helpers
 - 🐳 Provision containered runtimes without hand-wiring every instance
 - 🔗 Place helpers in shared or dedicated workspaces
 - 💬 Configure Telegram and Discord channels from the same UI
-- 🛠 Operate helpers from the browser: chat, logs, health, repair, reconcile, event history
+- 🛠 Operate helpers from the browser: chat, logs, health, repair, reconcile, event history, and request traces
 - 🛡 Helpers runs in their own isolated Docker containers with dedicated volumes and networks
 
 ---
@@ -157,6 +158,8 @@ All important configuration lives in the repo-root `.env`.
 | `RUNTIME_PROVIDER` | | Default LLM provider for new helpers |
 | `RUNTIME_MODEL` | | Default LLM model for new helpers |
 | `RUNTIME_HTTP_TIMEOUT_MS` | | Runtime HTTP timeout in ms (default `3600000`) |
+| `ATOLL_RUNTIME_EVENTS_MAX` | | Maximum retained runtime events (default `5000`) |
+| `ATOLL_RUNTIME_EVENTS_MAX_AGE_DAYS` | | Runtime event and trace retention age in days (default `30`; `0` disables age pruning) |
 | `RUNTIME_OPENCLAW_IMAGE` | ✅ | OpenClaw runtime image |
 | `RUNTIME_ZEROCLAW_IMAGE` | ✅ | ZeroClaw runtime image |
 | `RUNTIME_HERMES_IMAGE` | ✅ | Hermes runtime image |
@@ -189,9 +192,11 @@ GUI sidecar runtime options (available on all runtime types):
 | `/api/tenants` | Workspace management |
 | `/api/agents` | Helper CRUD |
 | `/api/agent-presets` | Preset catalog |
+| `/api/agents/:agentId/skills/catalog` | Installed and discoverable helper skills |
 | `/api/runtime/catalog` | Available runtime types |
 | `/api/runtime/provision-jobs` | Provision job tracking |
 | `/api/runtime/instances/*` | Lifecycle, chat, diagnostics |
+| `/api/runtime/instances/:instanceId/traces` | Chat request traces, timelines, and exports |
 | `/api/runtime/events` | Event history |
 | `/api/runtime/model-catalog` | LLM model listing |
 

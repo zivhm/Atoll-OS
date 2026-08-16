@@ -486,6 +486,7 @@ test("failed chat traces capture failure message and terminal status", async (t)
 
 test("runtime trace pruning keeps trace limits separate from runtime events", () => {
   const store = createTempStore();
+  const nowMs = Date.now();
   const tenant = store.ensureDefaultTenant("org-1");
   const agent = store.createAgent({
     tenantId: tenant.id,
@@ -507,7 +508,7 @@ test("runtime trace pruning keeps trace limits separate from runtime events", ()
     transport: "openai-chat-completions",
     model: "openai/gpt-5.3-chat",
     status: "started",
-    startedAt: "2026-04-20T10:00:00.000Z",
+    startedAt: new Date(nowMs - 2 * 60_000).toISOString(),
     toolCallCount: 0
   });
   store.appendRuntimeTraceEvent({
@@ -525,7 +526,7 @@ test("runtime trace pruning keeps trace limits separate from runtime events", ()
     transport: "openai-chat-completions",
     model: "openai/gpt-5.3-chat",
     status: "started",
-    startedAt: "2026-04-20T11:00:00.000Z",
+    startedAt: new Date(nowMs - 60_000).toISOString(),
     toolCallCount: 0
   });
   store.appendRuntimeTraceEvent({
@@ -543,7 +544,7 @@ test("runtime trace pruning keeps trace limits separate from runtime events", ()
     transport: "openai-chat-completions",
     model: "openai/gpt-5.3-chat",
     status: "started",
-    startedAt: "2026-04-20T12:00:00.000Z",
+    startedAt: new Date(nowMs).toISOString(),
     toolCallCount: 0
   });
   store.appendRuntimeEvent({
