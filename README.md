@@ -219,18 +219,6 @@ atoll-state.json          Local persisted state file
 
 ---
 
-## Runtime Notes
-
-| Setting | Value |
-| --- | --- |
-| Supported runtimes | OpenClaw, ZeroClaw, Hermes |
-| Default runtime type | `openclaw` |
-| Default hosted provider | `openrouter` |
-| Default hosted model | `anthropic/claude-sonnet-4.6` |
-| Long-term direction | Harness/Provider-agnostic runtime support |
-
----
-
 ## 🌐 Landing Page
 
 The public site is hosted on GitHub Pages, separate from the self-hosted control-plane app.
